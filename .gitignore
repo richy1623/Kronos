@@ -3,3 +3,6 @@
 
 # Sqlite
 database.db
+
+# Test
+test/
