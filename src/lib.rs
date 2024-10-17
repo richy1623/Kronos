@@ -1,3 +1,6 @@
+pub mod model;
+pub mod schema;
+
 use diesel::prelude::*;
 use dotenvy::dotenv;
 use std::env;

@@ -1,24 +1,21 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    Tasks (id) {
-        id -> Nullable<Integer>,
-        name -> Nullable<Text>,
+    task (id) {
+        id -> Integer,
+        name -> Text,
     }
 }
 
 diesel::table! {
-    TasksPerformed (id) {
-        id -> Nullable<Integer>,
-        task_id -> Nullable<Integer>,
-        date -> Nullable<Text>,
-        time_spent -> Nullable<Integer>,
+    task_performed (date, task_id) {
+        date -> Text,
+        task_id -> Integer,
+        time_spent -> Integer,
     }
 }
 
-diesel::joinable!(TasksPerformed -> Tasks (task_id));
-
 diesel::allow_tables_to_appear_in_same_query!(
-    Tasks,
-    TasksPerformed,
+    task,
+    task_performed,
 );
