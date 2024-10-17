@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::schema::task;
 use diesel::{prelude::*, result::Error};
 
@@ -59,7 +57,11 @@ impl Task {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Mutex, thread, time::Duration};
+    use std::{
+        sync::{Arc, Mutex},
+        thread,
+        time::Duration,
+    };
 
     use crate::establish_connection;
 
@@ -69,9 +71,8 @@ mod tests {
     #[fixture]
     #[once]
     pub fn database_connection_fixture() -> Arc<Mutex<SqliteConnection>> {
-        use crate::schema::task::dsl::*;
         let connection = Arc::new(Mutex::new(establish_connection()));
-        diesel::delete(task)
+        diesel::delete(task::table)
             .execute(&mut *connection.lock().unwrap())
             .expect("Failed to delete all records from table `task`");
         connection
