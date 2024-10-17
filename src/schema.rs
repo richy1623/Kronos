@@ -4,6 +4,7 @@ diesel::table! {
     task (id) {
         id -> Integer,
         name -> Text,
+        last_used -> Integer,
     }
 }
 

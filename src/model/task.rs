@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
+use crate::schema::task;
 use diesel::{prelude::*, result::Error};
-
-use crate::establish_connection;
 
 #[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq)]
 #[diesel(table_name = crate::schema::task)]
@@ -10,6 +9,7 @@ use crate::establish_connection;
 pub struct Task {
     pub id: i32,
     pub name: String,
+    pub last_used: i32,
 }
 
 impl Task {
@@ -17,22 +17,20 @@ impl Task {
         task_name: &str,
         connection: &Arc<Mutex<SqliteConnection>>,
     ) -> Option<Self> {
-        use crate::schema::task::dsl::*;
-
         let mut connection = connection.lock().unwrap();
 
-        task.filter(name.eq(task_name))
+        task::table
+            .filter(task::name.eq(task_name))
             .select(Task::as_select())
             .first(&mut *connection)
             .ok()
     }
 
     pub fn get_task_by_id(task_id: i32, connection: &Arc<Mutex<SqliteConnection>>) -> Option<Self> {
-        use crate::schema::task::dsl::*;
-
         let mut connection = connection.lock().unwrap();
 
-        task.filter(id.eq(task_id))
+        task::table
+            .filter(task::id.eq(task_id))
             .select(Task::as_select())
             .first(&mut *connection)
             .ok()
@@ -42,12 +40,23 @@ impl Task {
         task_name: &str,
         connection: &Arc<Mutex<SqliteConnection>>,
     ) -> Result<Task, Error> {
-        use crate::schema::task::dsl::*;
-
         let mut connection = connection.lock().unwrap();
 
-        diesel::insert_into(task)
-            .values(name.eq(task_name))
+        diesel::insert_into(task::table)
+            .values(task::name.eq(task_name))
+            .returning(Task::as_returning())
+            .get_result(&mut *connection)
+    }
+
+    pub fn update_task_last_used(
+        task_name: &str,
+        connection: &Arc<Mutex<SqliteConnection>>,
+    ) -> Result<Task, Error> {
+        let mut connection = connection.lock().unwrap();
+
+        diesel::update(task::table)
+            .filter(task::name.eq(task_name))
+            .set(task::last_used.eq(chrono::Utc::now().timestamp() as i32))
             .returning(Task::as_returning())
             .get_result(&mut *connection)
     }
@@ -56,6 +65,8 @@ impl Task {
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
+
+    use crate::establish_connection;
 
     use super::*;
     use rstest::*;

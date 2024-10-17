@@ -1,9 +1,8 @@
--- Your SQL goes here
 CREATE TABLE
     task_performed (
         date TEXT NOT NULL, -- Store dates as 'YYYY-MM-DD'
         task_id INTEGER NOT NULL,
-        time_spent INTEGER NOT NULL,
+        time_spent INTEGER NOT NULL DEFAULT 0, -- Set default to 0
         PRIMARY KEY (date, task_id),
         FOREIGN KEY (task_id) REFERENCES Tasks (id)
     );
