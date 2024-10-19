@@ -2,16 +2,30 @@ use diesel::{prelude::*, result::Error};
 
 use crate::schema::task_performed;
 
+/// A struct to represent a task performed.
 #[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq)]
 #[diesel(table_name = crate::schema::task_performed)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct TaskPerformed {
+    /// The date the task was performed.
     pub date: String,
+    /// The ID of the task that was performed.
     pub task_id: i32,
+    /// The time spent performing the task.
     pub time_spent: i32,
 }
 
 impl TaskPerformed {
+    /// Retrieves a task performed by its `task_id` and `date`.
+    ///
+    /// # Arguments
+    ///
+    /// * `task_id`: The ID of the task that was performed.
+    /// * `date`: The date the task was performed.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `TaskPerformed` if found, or `None` otherwise.
     pub fn get_task_by_task_id_and_date(
         task_id: i32,
         date: &str,
@@ -25,6 +39,15 @@ impl TaskPerformed {
             .ok()
     }
 
+    /// Retrieves all tasks performed by a given `task_id`.
+    ///
+    /// # Arguments
+    ///
+    /// * `task_id`: The ID of the task.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec` of `TaskPerformed` structs if found, or an empty vector otherwise.
     pub fn get_all_tasks_by_task_id(task_id: i32, connection: &mut SqliteConnection) -> Vec<Self> {
         task_performed::table
             .filter(task_performed::task_id.eq(task_id))
@@ -33,6 +56,15 @@ impl TaskPerformed {
             .unwrap_or(vec![])
     }
 
+    /// Retrieves all tasks performed on a given `date`.
+    ///
+    /// # Arguments
+    ///
+    /// * `date`: The date the task was performed.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec` of `TaskPerformed` structs if found, or an empty vector otherwise.
     pub fn get_all_tasks_by_date(date: &str, connection: &mut SqliteConnection) -> Vec<Self> {
         task_performed::table
             .filter(task_performed::date.eq(date))
@@ -41,6 +73,15 @@ impl TaskPerformed {
             .unwrap_or(vec![])
     }
 
+    /// Updates a `TaskPerformed` record.
+    ///
+    /// # Arguments
+    ///
+    /// * `task_performed`: The updated `TaskPerformed` record.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the updated `TaskPerformed` if successful, or an `Error` otherwise.
     pub fn update_task_performed(
         task_performed: TaskPerformed,
         connection: &mut SqliteConnection,
@@ -53,6 +94,15 @@ impl TaskPerformed {
             .get_result(&mut *connection)
     }
 
+    /// Inserts a new `TaskPerformed` record.
+    ///
+    /// # Arguments
+    ///
+    /// * `task_performed`: The `TaskPerformed` to insert.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the inserted `TaskPerformed` if successful, or an `Error` otherwise.
     pub fn insert_task_performed(
         task_performed: &TaskPerformed,
         connection: &mut SqliteConnection,
@@ -64,16 +114,27 @@ impl TaskPerformed {
             .get_result(&mut *connection)
     }
 
+    /// Deletes a `TaskPerformed` record.
+    ///
+    /// # Arguments
+    ///
+    /// * `task_id`: The ID of the task that was performed.
+    /// * `date`: The date the task was performed.
+    ///
+    /// Removes a single `TaskPerformed` record from the database.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the number of affected rows if successful, or an `Error` otherwise.
     pub fn delete_task_performed(
         task_id: i32,
         date: &str,
         connection: &mut SqliteConnection,
-    ) -> Result<TaskPerformed, Error> {
+    ) -> Result<usize, Error> {
         diesel::delete(task_performed::table)
             .filter(task_performed::date.eq(date))
             .filter(task_performed::task_id.eq(task_id))
-            .returning(TaskPerformed::as_returning())
-            .get_result(&mut *connection)
+            .execute(&mut *connection)
     }
 
     // TODO Do we need this method? We can probably just call cascade delete on a Task
@@ -322,7 +383,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(delete_task_performed, task_to_delete);
+        assert_eq!(delete_task_performed, 1);
 
         let task_deleted = TaskPerformed::get_task_by_task_id_and_date(
             task_to_delete.task_id,
@@ -340,13 +401,13 @@ mod tests {
         let mut database_connection_fixture: std::sync::MutexGuard<'_, SqliteConnection> =
             database_connection_fixture.lock().unwrap();
 
-        let delete_err = TaskPerformed::delete_task_performed(
+        let delete_task_performed = TaskPerformed::delete_task_performed(
             -1,
             &"2000-08-14",
             &mut database_connection_fixture,
         )
-        .unwrap_err();
+        .unwrap();
 
-        assert_eq!(delete_err, Error::NotFound);
+        assert_eq!(delete_task_performed, 0);
     }
 }
