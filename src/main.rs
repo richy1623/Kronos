@@ -1,3 +1,8 @@
+mod utils;
+
+use utils::app_settings::AppSettings;
+
+
 fn main() {
-    println!("Hello, world!");
+    let app_settings = AppSettings::new();
 }
