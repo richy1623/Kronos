@@ -1,5 +1,6 @@
 pub mod model;
 pub mod schema;
+pub mod task_prompt;
 
 use diesel::prelude::*;
 use dotenvy::dotenv;
