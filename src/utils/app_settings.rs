@@ -1,25 +1,25 @@
-use std::{fs::File, path::Path};
-use serde::{Deserialize, Serialize};
+use std::{fs::{self, File}, path::Path};
 
-#[derive(serde::Deserialize)]
 pub struct AppSettings {
-    setting_1: Option<String>,
-    setting_2: Option<String>,
+    username: String,
+    api_key: String,
 }
 
 impl AppSettings {
     pub fn new() -> AppSettings {
         let mut app_settings = AppSettings {
-            setting_1: None,
-            setting_2: None,
+            username: String::from("[PLACEHOLDER]"),
+            api_key: String::from("[PLACEHOLDER]"),
         };
         app_settings.load();
         app_settings
     }
 
-    fn load(&mut self) {
-        let json_file_path = Path::new("default_settings.json");
-        let settings_file = File::open(json_file_path);
-        let users:Vec<AppSettings> = serde_json::from_reader(settings_file).expect("error while reading or parsing");
+    pub fn load(&mut self) {
+        print!("Reading settings . . .\n");
+        let json_file_path = Path::new("./user_settings.json");
+        let mut settings_string = fs::read_to_string("user_settings.json").expect("Should have been able to read the file");
+        print!("{}\n", settings_string);
+
     }
 }
