@@ -40,12 +40,8 @@ impl TaskPrompt {
     pub fn update_task(self, task_name: &str, time_spent_minutes: i32) {
         let mut connection = self.db_connection.lock().unwrap();
 
-        let task = Task::get_task_by_name(task_name, &mut connection);
-
-        let task = match task {
-            Some(task) => task,
-            None => Task::create_task(task_name, &mut connection).unwrap(),
-        };
+        let task =
+            Task::get_or_create_task(task_name, &mut connection).expect("Get or Create Failed");
 
         let current_date = Local::now().date_naive().to_string();
 

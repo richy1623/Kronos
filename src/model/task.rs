@@ -27,7 +27,7 @@ impl Task {
             .ok()
     }
 
-    pub fn create_task(task_name: &str, connection: &mut SqliteConnection) -> Result<Task, Error> {
+    pub fn create_task(task_name: &str, connection: &mut SqliteConnection) -> Result<Self, Error> {
         diesel::insert_into(task::table)
             .values(task::name.eq(task_name))
             .returning(Task::as_returning())
@@ -45,13 +45,23 @@ impl Task {
             .get_result(&mut *connection)
     }
 
-    pub fn fetch_most_recent_tasks(max_tasks: i32, connection: &mut SqliteConnection) -> Vec<Task> {
+    pub fn fetch_most_recent_tasks(max_tasks: i32, connection: &mut SqliteConnection) -> Vec<Self> {
         task::table
             .order(task::last_used.desc())
             .limit(max_tasks.into())
             .select(Task::as_select())
             .load(&mut *connection)
             .unwrap_or(vec![])
+    }
+
+    pub fn get_or_create_task(
+        task_name: &str,
+        connection: &mut SqliteConnection,
+    ) -> Result<Self, Error> {
+        match Task::get_task_by_name(task_name, connection) {
+            Some(task) => Ok(task),
+            None => Task::create_task(task_name, connection),
+        }
     }
 }
 

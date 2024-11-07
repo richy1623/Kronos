@@ -114,6 +114,23 @@ impl TaskPerformed {
             .get_result(&mut *connection)
     }
 
+    pub fn insert_or_update_task_performed(
+        task_performed: &TaskPerformed,
+        connection: &mut SqliteConnection,
+    ) -> Result<TaskPerformed, Error> {
+        let optional_task_performed = TaskPerformed::get_task_by_task_id_and_date(
+            task_performed.task_id,
+            &task_performed.date,
+            connection,
+        );
+        match optional_task_performed {
+            Some(task_performed) => {
+                TaskPerformed::update_task_performed(task_performed, connection)
+            }
+            None => TaskPerformed::insert_task_performed(task_performed, connection),
+        }
+    }
+
     /// Deletes a `TaskPerformed` record.
     ///
     /// # Arguments
