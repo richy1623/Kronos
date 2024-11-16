@@ -1,5 +1,9 @@
 use crate::schema::task;
+use chrono::Local;
 use diesel::{prelude::*, result::Error};
+use regex::Regex;
+
+use super::task_performed::TaskPerformed;
 
 #[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq)]
 #[diesel(table_name = crate::schema::task)]
@@ -62,6 +66,44 @@ impl Task {
             Some(task) => Ok(task),
             None => Task::create_task(task_name, connection),
         }
+    }
+
+    pub fn get_all_matching_tasks(
+        search_string: &str,
+        connection: &mut SqliteConnection,
+    ) -> Vec<Task> {
+        let regex = Task::create_task_search_regex(search_string);
+
+        let most_recent_tasks = Task::fetch_most_recent_tasks(1000, connection);
+
+        most_recent_tasks
+            .into_iter()
+            .filter(|task| regex.is_match(&task.name))
+            .take(10)
+            .collect()
+    }
+
+    fn create_task_search_regex(search_string: &str) -> Regex {
+        Regex::new(&format!(
+            "(?i).*{}",
+            search_string
+                .chars()
+                .map(|character| format!("{}.*", regex::escape(&character.to_string())))
+                .collect::<String>()
+        ))
+        .unwrap()
+    }
+
+    pub fn filter_all_matching_tasks<'a>(
+        tasks: &'a Vec<Task>,
+        search_string: &str,
+    ) -> Vec<&'a Task> {
+        let regex = Task::create_task_search_regex(search_string);
+        tasks
+            .into_iter()
+            .filter(|task| regex.is_match(&task.name))
+            .take(10)
+            .collect()
     }
 }
 
@@ -203,4 +245,55 @@ mod tests {
         assert_eq!(recent_tasks[0].id, task_2.id);
         assert_eq!(recent_tasks[1].id, task_3.id);
     }
+
+    #[rstest]
+    #[case("", r"(?i).*")]
+    #[case("cat", r"(?i).*c.*a.*t.*")]
+    #[case("fix", r"(?i).*f.*i.*x.*")]
+    #[case("call", r"(?i).*c.*a.*l.*l.*")]
+    #[case("xyz", r"(?i).*x.*y.*z.*")]
+    fn test_create_task_search_regex(#[case] search_string: &str, #[case] expected_pattern: &str) {
+        // Call the function to generate the regex
+        let regex = Task::create_task_search_regex(search_string);
+
+        // Check the generated regex pattern
+        assert_eq!(regex.to_string(), expected_pattern);
+    }
+
+    // #[rstest]
+    // #[case("cat", vec![
+    //     "Complete the cat report",
+    //     "Buy a caterpillar plushie",
+    //     "Catalog new books"
+    // ])]
+    // #[case("fix", vec!["Fix the faucet"])]
+    // #[case("call m", vec!["Call mom"])]
+    // #[case("out", vec!["Take out the trash"])]
+    // #[case("xyz", vec![])] // No matches
+    // fn test_filter_all_matching_tasks(
+    //     #[case] search_string: &str,
+    //     #[case] expected_matches: Vec<&str>,
+    // ) {
+    //     let tasks = vec![
+    //         String::from("Complete the cat report"),
+    //         String::from("Buy a caterpillar plushie"),
+    //         String::from("Catalog new books"),
+    //         String::from("Take out the trash"),
+    //         String::from("Fix the faucet"),
+    //         String::from("Call mom"),
+    //     ];
+
+    //     // Call the function to filter tasks
+    //     let matches = Task::filter_all_matching_tasks(&tasks, search_string);
+
+    //     // Extract the string values of the matches for comparison
+    //     let match_strings: Vec<&str> = matches.iter().map(|s| s.as_str()).collect();
+
+    //     // Assert results
+    //     assert_eq!(
+    //         match_strings, expected_matches,
+    //         "Failed for search_string: '{}'. Got: {:?}, Expected: {:?}",
+    //         search_string, match_strings, expected_matches
+    //     );
+    // }
 }
