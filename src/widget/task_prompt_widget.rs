@@ -22,6 +22,7 @@ impl egui::Widget for &mut TaskPromptWidget {
             let task_name_text_edit =
                 ui.text_edit_singleline(&mut self.task_prompt.task_name_option);
 
+            // TODO: better id
             let popup_id = Id::new("popup");
 
             egui::popup_below_widget(
