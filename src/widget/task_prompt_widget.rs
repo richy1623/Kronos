@@ -48,17 +48,6 @@ impl egui::Widget for &mut TaskPromptWidget {
             ui.memory_mut(|m| m.open_popup(popup_id));
         }
 
-        // if task_name_text_edit.has_focus() {
-        //     for task_option in &self.task_prompt.available_task_options {
-        //         let button = ui.button(task_option);
-        //         if button.clicked() {
-        //             self.task_prompt.task_name_option = task_option.to_string();
-        //             return ui.response();
-        //             // task_name_text_edit.surrender_focus();
-        //         }
-        //     }
-        // }
-        // let response = ui.add(egui::TextEdit::singleline(&mut self.task_name));
         if task_name_text_edit.changed() {
             self.task_prompt.available_task_options = Task::filter_all_matching_tasks(
                 &self.task_prompt.task_options,
