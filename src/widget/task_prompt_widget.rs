@@ -68,7 +68,9 @@ impl egui::Widget for &mut TaskPromptWidget {
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("Cancel").clicked() {}
+                    if ui.button("Cancel").clicked() {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
                     // Make sure there is space for the second button by using with_layout
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Max), |ui| {
                         // "Accept" button on the right
