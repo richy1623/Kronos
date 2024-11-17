@@ -1,4 +1,4 @@
-use egui::{Id, ScrollArea};
+use egui::{Button, Id, ScrollArea};
 
 use crate::{model::task::Task, task_prompt::TaskPrompt};
 
@@ -14,6 +14,10 @@ impl TaskPromptWidget {
 
 impl egui::Widget for &mut TaskPromptWidget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+        ui.label(format!(
+            "What have you been doing for the past '{}' minutes?",
+            self.task_prompt.get_time_spent_minutes()
+        ));
         let task_name_text_edit = ui.text_edit_singleline(&mut self.task_prompt.task_name_option);
 
         let popup_id = Id::new("popup");
@@ -67,9 +71,22 @@ impl egui::Widget for &mut TaskPromptWidget {
 
         if task_name_text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             println!("selected: {}", self.task_prompt.task_name_option);
-            self.task_prompt.update_task(10);
-            ui.close_menu();
+            self.task_prompt.update_task();
         }
+
+        ui.horizontal(|ui| {
+            if ui.button("Cancel").clicked() {}
+
+            if ui
+                .add_enabled(
+                    self.task_prompt.task_name_option != "",
+                    Button::new("Accept"),
+                )
+                .clicked()
+            {
+                self.task_prompt.update_task();
+            }
+        });
 
         ui.response()
     }

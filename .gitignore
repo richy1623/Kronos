@@ -4,5 +4,8 @@
 # Sqlite
 database.db
 
+# User Files
+data/latest_task.json
+
 # Test
 test/

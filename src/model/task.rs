@@ -1,9 +1,6 @@
 use crate::schema::task;
-use chrono::Local;
 use diesel::{prelude::*, result::Error};
 use regex::Regex;
-
-use super::task_performed::TaskPerformed;
 
 #[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq)]
 #[diesel(table_name = crate::schema::task)]
