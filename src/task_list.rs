@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 use crate::model::{task::Task, task_performed::TaskPerformed};
 use chrono::NaiveDate;
 use diesel::SqliteConnection;
+
+#[derive(Clone)]
 pub struct TaskListItem {
     pub task_performed: TaskPerformed,
     pub task_name: String,

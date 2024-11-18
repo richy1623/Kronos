@@ -11,7 +11,7 @@ fn main() {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_always_on_top()
-            .with_inner_size([320.0, 240.0]),
+            .with_inner_size([600.0, 600.0]),
         ..Default::default()
     };
 

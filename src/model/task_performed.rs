@@ -3,7 +3,7 @@ use diesel::{prelude::*, result::Error};
 use crate::schema::task_performed;
 
 /// A struct to represent a task performed.
-#[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq)]
+#[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq, Clone)]
 #[diesel(table_name = crate::schema::task_performed)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct TaskPerformed {
