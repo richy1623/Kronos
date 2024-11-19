@@ -12,7 +12,7 @@ pub struct TaskListItem {
 pub struct TaskList {
     db_connection: Arc<Mutex<SqliteConnection>>,
     date: NaiveDate,
-    task_for_date: Vec<TaskListItem>,
+    tasks_for_date: Vec<TaskListItem>,
 }
 
 impl TaskList {
@@ -20,7 +20,7 @@ impl TaskList {
         let mut task_list = TaskList {
             db_connection,
             date,
-            task_for_date: Vec::new(),
+            tasks_for_date: Vec::new(),
         };
         task_list.change_date(date);
         task_list
@@ -45,31 +45,37 @@ impl TaskList {
             .collect();
 
         self.date = date;
-        self.task_for_date = task_for_date;
+        self.tasks_for_date = task_for_date;
     }
 
     pub fn list_all_tasks_performed(&self) -> &Vec<TaskListItem> {
-        &self.task_for_date
+        &self.tasks_for_date
     }
 
-    pub fn add_task(self, task_name: &str, date: &NaiveDate, time_spent: i32) {
+    pub fn add_task(&mut self, task_name: &str, time_spent: i32) {
+        //TODO: this does not handle duplicate task names
         let mut connection = self.db_connection.lock().unwrap();
 
         let task = Task::get_or_create_task(task_name, &mut connection)
             .expect("Failed to get or create task");
 
-        TaskPerformed::insert_or_update_task_performed(
+        let task_performed = TaskPerformed::insert_or_overwrite_task_performed(
             &TaskPerformed {
-                date: date.to_string(),
+                date: self.date.to_string(),
                 task_id: task.id,
                 time_spent,
             },
             &mut connection,
         )
         .expect("todo");
+
+        self.tasks_for_date.push(TaskListItem {
+            task_name: task_name.to_string(),
+            task_performed: task_performed,
+        });
     }
 
-    pub fn delete_task(self, task_name: &str, date: &NaiveDate) {
+    pub fn delete_task_performed(self, task_name: &str, date: &NaiveDate) {
         let mut connection = self.db_connection.lock().unwrap();
 
         let task = Task::get_task_by_name(task_name, &mut connection);
@@ -80,5 +86,61 @@ impl TaskList {
         };
 
         TaskPerformed::delete_task_performed(task.id, &date.to_string(), &mut connection).unwrap();
+    }
+
+    pub fn update_task_performed(&mut self, task_id: i32, task_name: &str, time_spent: i32) {
+        let mut connection = self.db_connection.lock().unwrap();
+
+        // Check to see if a task exists with that name for the day
+
+        let task_to_update_index = self
+            .tasks_for_date
+            .iter()
+            .position(|task_list_item| task_list_item.task_performed.task_id == task_id)
+            .expect("Updating a task should always have a valid task_id");
+
+        let task_to_update = self.tasks_for_date.swap_remove(task_to_update_index);
+
+        let mut new_task = TaskPerformed {
+            task_id,
+            time_spent,
+            date: self.date.to_string(),
+        };
+
+        if task_to_update.task_name != task_name {
+            // Check if we need to update an existing task
+            let task_item_with_same_name = self
+                .tasks_for_date
+                .iter()
+                .filter(|task_list_item| {
+                    task_list_item.task_name == task_name
+                        && task_list_item.task_performed.task_id != task_id
+                })
+                .next();
+
+            match task_item_with_same_name {
+                Some(task) => {
+                    new_task.time_spent = new_task.time_spent + task.task_performed.time_spent;
+                    new_task.task_id = task.task_performed.task_id;
+                }
+                None => {
+                    // Fetch the correct new task id
+                    new_task.task_id = Task::get_or_create_task(task_name, &mut connection)
+                        .unwrap()
+                        .id
+                }
+            };
+
+            // Remove the old task_performed from the db
+            TaskPerformed::delete_task_performed(task_id, &self.date.to_string(), &mut connection)
+                .unwrap();
+        }
+
+        // Insert or update the new task
+        TaskPerformed::insert_or_overwrite_task_performed(&new_task, &mut connection).unwrap();
+        self.tasks_for_date.push(TaskListItem {
+            task_performed: new_task,
+            task_name: task_name.to_string(),
+        });
     }
 }

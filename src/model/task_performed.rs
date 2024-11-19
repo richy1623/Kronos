@@ -114,7 +114,7 @@ impl TaskPerformed {
             .get_result(&mut *connection)
     }
 
-    pub fn insert_or_update_task_performed(
+    pub fn insert_or_overwrite_task_performed(
         task_performed: &TaskPerformed,
         connection: &mut SqliteConnection,
     ) -> Result<TaskPerformed, Error> {
