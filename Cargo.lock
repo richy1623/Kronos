@@ -1859,6 +1859,7 @@ dependencies = [
  "eframe",
  "egui",
  "libsqlite3-sys",
+ "rand",
  "regex",
  "rstest",
  "serde",

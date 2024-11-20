@@ -1,14 +1,33 @@
-use egui::{Button, Id, ScrollArea};
+use egui::Button;
 
-use crate::{model::task::Task, task_prompt::TaskPrompt};
+use crate::task_prompt::TaskPrompt;
+
+use super::task_select_widget::TaskSelectWidget;
 
 pub struct TaskPromptWidget {
     task_prompt: TaskPrompt,
+    task_select_widget: TaskSelectWidget,
 }
 
 impl TaskPromptWidget {
     pub fn new(task_prompt: TaskPrompt) -> Self {
-        TaskPromptWidget { task_prompt }
+        let task_select_widget = TaskSelectWidget::new(
+            task_prompt
+                .task_options
+                .iter()
+                .map(|task| task.name.clone())
+                .collect(),
+        );
+        TaskPromptWidget {
+            task_prompt,
+            task_select_widget,
+        }
+    }
+
+    fn update_task_performed(&mut self, ui: &mut egui::Ui) {
+        self.task_prompt.task_name_option = self.task_select_widget.get_input_text().to_string();
+        self.task_prompt.update_task();
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
     }
 }
 
@@ -19,51 +38,11 @@ impl egui::Widget for &mut TaskPromptWidget {
                 "What have you been doing for the past '{}' minutes?",
                 self.task_prompt.get_time_spent_minutes()
             ));
-            let task_name_text_edit =
-                ui.text_edit_singleline(&mut self.task_prompt.task_name_option);
 
-            // TODO: better id
-            let popup_id = Id::new("popup");
+            ui.add(&mut self.task_select_widget);
 
-            egui::popup_below_widget(
-                ui,
-                popup_id,
-                &task_name_text_edit,
-                egui::PopupCloseBehavior::CloseOnClick,
-                |ui| {
-                    ui.set_max_height(100.0);
-
-                    ScrollArea::vertical()
-                        .max_height(f32::INFINITY)
-                        .show(ui, |ui| {
-                            for task_option in &self.task_prompt.available_task_options {
-                                if ui.button(task_option).clicked() {
-                                    println!("Clicked: {}", task_option);
-                                    self.task_prompt.task_name_option = task_option.to_string();
-                                    ui.memory_mut(|m| m.close_popup());
-                                }
-                            }
-                        });
-                },
-            );
-
-            if task_name_text_edit.gained_focus() {
-                ui.memory_mut(|m| m.open_popup(popup_id));
-            }
-
-            if task_name_text_edit.changed() {
-                self.task_prompt.available_task_options = Task::filter_all_matching_tasks(
-                    &self.task_prompt.task_options,
-                    &self.task_prompt.task_name_option,
-                )
-                .iter()
-                .map(|&s| s.name.clone())
-                .collect();
-            }
-
-            if task_name_text_edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                println!("selected: {}", self.task_prompt.task_name_option);
-                self.task_prompt.update_task();
+            if self.task_select_widget.did_select_option {
+                self.update_task_performed(ui);
             }
 
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
@@ -76,17 +55,18 @@ impl egui::Widget for &mut TaskPromptWidget {
                         // "Accept" button on the right
                         if ui
                             .add_enabled(
-                                self.task_prompt.task_name_option != "",
+                                self.task_select_widget.get_input_text() != "",
                                 Button::new("Accept"),
                             )
                             .clicked()
                         {
-                            self.task_prompt.update_task();
+                            self.update_task_performed(ui);
                         }
                     });
                 })
             });
         });
+
         ui.response()
     }
 }

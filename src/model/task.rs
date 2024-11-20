@@ -92,13 +92,13 @@ impl Task {
     }
 
     pub fn filter_all_matching_tasks<'a>(
-        tasks: &'a Vec<Task>,
+        task_names: &'a Vec<String>,
         search_string: &str,
-    ) -> Vec<&'a Task> {
+    ) -> Vec<&'a String> {
         let regex = Task::create_task_search_regex(search_string);
-        tasks
+        task_names
             .into_iter()
-            .filter(|task| regex.is_match(&task.name))
+            .filter(|task| regex.is_match(&task))
             .take(10)
             .collect()
     }
