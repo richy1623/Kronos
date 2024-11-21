@@ -10,19 +10,23 @@ pub struct TaskSelectWidget {
     widget_id: Id,
     pub did_select_option: bool,
     did_click_option: bool,
+    pub desired_width: Option<f32>,
+    pub max_height: Option<f32>,
 }
 
 impl TaskSelectWidget {
-    pub fn new(task_options: Vec<String>) -> Self {
+    pub fn new(initial_task_name: String, task_options: Vec<String>) -> Self {
         let available_task_options = task_options.clone();
 
         TaskSelectWidget {
             task_options,
             available_task_options,
-            input_text: String::new(),
+            input_text: initial_task_name,
             widget_id: Id::new(rand::thread_rng().gen::<u64>()),
             did_select_option: false,
             did_click_option: false,
+            desired_width: None,
+            max_height: None,
         }
     }
 
@@ -38,9 +42,16 @@ impl TaskSelectWidget {
                 .collect();
     }
 }
+
 impl egui::Widget for &mut TaskSelectWidget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        let task_name_text_edit = ui.text_edit_singleline(&mut self.input_text);
+        let mut text_edit = egui::TextEdit::singleline(&mut self.input_text);
+
+        if let Some(desired_width) = self.desired_width {
+            text_edit = text_edit.desired_width(desired_width);
+        }
+
+        let task_name_text_edit = ui.add(text_edit);
 
         if task_name_text_edit.changed() || self.did_click_option {
             self.update_available_options();
@@ -56,7 +67,9 @@ impl egui::Widget for &mut TaskSelectWidget {
             &task_name_text_edit,
             egui::PopupCloseBehavior::CloseOnClick,
             |ui| {
-                ui.set_max_height(100.0);
+                if let Some(max_height) = self.max_height {
+                    ui.set_max_height(max_height);
+                }
 
                 ScrollArea::vertical()
                     .max_height(f32::INFINITY)

@@ -11,13 +11,15 @@ pub struct TaskPromptWidget {
 
 impl TaskPromptWidget {
     pub fn new(task_prompt: TaskPrompt) -> Self {
-        let task_select_widget = TaskSelectWidget::new(
+        let mut task_select_widget = TaskSelectWidget::new(
+            String::new(),
             task_prompt
                 .task_options
                 .iter()
                 .map(|task| task.name.clone())
                 .collect(),
         );
+        task_select_widget.max_height = Some(100.0);
         TaskPromptWidget {
             task_prompt,
             task_select_widget,

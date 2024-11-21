@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    cmp::Reverse,
+    sync::{Arc, Mutex},
+};
 
 use crate::model::{task::Task, task_performed::TaskPerformed};
 use chrono::NaiveDate;
@@ -31,7 +34,7 @@ impl TaskList {
             &date.to_string(),
             &mut self.db_connection.lock().unwrap(),
         );
-        let task_for_date = get_all_tasks_by_date
+        let mut task_for_date = get_all_tasks_by_date
             .into_iter()
             .map(|task_performed| TaskListItem {
                 task_name: Task::get_task_by_id(
@@ -42,7 +45,10 @@ impl TaskList {
                 .name,
                 task_performed,
             })
-            .collect();
+            .collect::<Vec<TaskListItem>>();
+        task_for_date.sort_by_key(|task| Reverse(task.task_performed.time_spent));
+
+        // task_for_date.sort_by(compare);
 
         self.date = date;
         self.tasks_for_date = task_for_date;
@@ -142,5 +148,15 @@ impl TaskList {
             task_performed: new_task,
             task_name: task_name.to_string(),
         });
+        self.tasks_for_date
+            .sort_by_key(|task| Reverse(task.task_performed.time_spent));
+    }
+
+    pub fn fetch_most_recent_task_names(&self, max_tasks: i32) -> Vec<String> {
+        let mut connection = self.db_connection.lock().unwrap();
+        Task::fetch_most_recent_tasks(max_tasks, &mut connection)
+            .into_iter()
+            .map(|task| task.name)
+            .collect()
     }
 }
