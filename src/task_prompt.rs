@@ -53,7 +53,7 @@ impl TaskPrompt {
         match task_performed {
             Some(mut task_performed) => {
                 task_performed.time_spent += time_spent_minutes;
-                TaskPerformed::update_task_performed(task_performed, &mut connection)
+                TaskPerformed::update_task_performed(&task_performed, &mut connection)
                     .expect("Insert Failed");
             }
             None => {

@@ -120,7 +120,7 @@ impl TaskList {
                 .iter()
                 .filter(|task_list_item| {
                     task_list_item.task_name == task_name
-                        && task_list_item.task_performed.task_id != task_id
+                        && task_list_item.task_performed.task_id != task_id // TODO remove this line
                 })
                 .next();
 
