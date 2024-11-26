@@ -59,25 +59,39 @@ impl TaskList {
     }
 
     pub fn add_task(&mut self, task_name: &str, time_spent: i32) {
-        //TODO: this does not handle duplicate task names
         let mut connection = self.db_connection.lock().unwrap();
 
         let task = Task::get_or_create_task(task_name, &mut connection)
             .expect("Failed to get or create task");
 
-        let task_performed = TaskPerformed::insert_or_overwrite_task_performed(
-            &TaskPerformed {
-                date: self.date.to_string(),
-                task_id: task.id,
-                time_spent,
-            },
+        let task_performed = TaskPerformed::get_task_by_task_id_and_date(
+            task.id,
+            &self.date.to_string(),
             &mut connection,
-        )
-        .expect("todo");
+        );
+
+        let task_performed = match task_performed {
+            Some(mut task_performed) => {
+                task_performed.time_spent += time_spent;
+                TaskPerformed::update_task_performed(&task_performed, &mut connection)
+                    .expect("todo")
+            }
+            None => {
+                TaskPerformed::insert_task_performed(
+                    &TaskPerformed {
+                        date: self.date.to_string(),
+                        task_id: task.id,
+                        time_spent,
+                    },
+                    &mut connection,
+                )
+                .expect("todo") // TODO this should probably return the error
+            }
+        };
 
         self.tasks_for_date.push(TaskListItem {
             task_name: task_name.to_string(),
-            task_performed: task_performed,
+            task_performed,
         });
     }
 
