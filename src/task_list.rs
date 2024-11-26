@@ -64,14 +64,19 @@ impl TaskList {
         let task = Task::get_or_create_task(task_name, &mut connection)
             .expect("Failed to get or create task");
 
-        let task_performed = TaskPerformed::get_task_by_task_id_and_date(
-            task.id,
-            &self.date.to_string(),
-            &mut connection,
-        );
+        let task_performed_index = self
+            .tasks_for_date
+            .iter()
+            .position(|task_list_item| task_list_item.task_name == task_name);
 
-        let task_performed = match task_performed {
-            Some(mut task_performed) => {
+        let task_performed = match task_performed_index {
+            Some(task_performed_index) => {
+                // Remove and extract the old TaskListItem from the tasks_for_date
+                let mut task_performed = self
+                    .tasks_for_date
+                    .swap_remove(task_performed_index)
+                    .task_performed;
+                // Update the total time spent
                 task_performed.time_spent += time_spent;
                 TaskPerformed::update_task_performed(&task_performed, &mut connection)
                     .expect("todo")
@@ -93,6 +98,9 @@ impl TaskList {
             task_name: task_name.to_string(),
             task_performed,
         });
+
+        self.tasks_for_date
+            .sort_by_key(|task| Reverse(task.task_performed.time_spent));
     }
 
     pub fn delete_task_performed(self, task_name: &str, date: &NaiveDate) {
@@ -129,17 +137,15 @@ impl TaskList {
 
         if task_to_update.task_name != task_name {
             // Check if we need to update an existing task
-            let task_item_with_same_name = self
-                .tasks_for_date
-                .iter()
-                .filter(|task_list_item| {
+            let task_item_with_same_name_index =
+                self.tasks_for_date.iter().position(|task_list_item| {
                     task_list_item.task_name == task_name
                         && task_list_item.task_performed.task_id != task_id // TODO remove this line
-                })
-                .next();
+                });
 
-            match task_item_with_same_name {
-                Some(task) => {
+            match task_item_with_same_name_index {
+                Some(index) => {
+                    let task = self.tasks_for_date.swap_remove(index);
                     new_task.time_spent = new_task.time_spent + task.task_performed.time_spent;
                     new_task.task_id = task.task_performed.task_id;
                 }
