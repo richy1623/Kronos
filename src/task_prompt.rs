@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::model::{latest_task::LatestTask, task::Task, task_performed::TaskPerformed};
-use chrono::{DateTime, Local};
+use chrono::Local;
 use diesel::SqliteConnection;
 
 pub struct TaskPrompt {
@@ -26,15 +26,10 @@ impl TaskPrompt {
     }
 
     pub fn get_time_spent_minutes(&self) -> i32 {
-        (Local::now()
-            - self
-                .latest_task_performed
-                .date_time_performed
-                .parse::<DateTime<Local>>()
-                .unwrap())
-        .num_minutes()
-        .try_into()
-        .unwrap()
+        (Local::now() - self.latest_task_performed.date_time_performed)
+            .num_minutes()
+            .try_into()
+            .unwrap()
     }
 
     pub fn update_task(&mut self) {

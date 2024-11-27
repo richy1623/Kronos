@@ -8,7 +8,7 @@ const LATEST_TASK_FILE_LOCATION: &str = "./data/latest_task.json";
 #[derive(Deserialize, Serialize, Debug)]
 pub struct LatestTask {
     pub task_id: i32,
-    pub date_time_performed: String,
+    pub date_time_performed: chrono::DateTime<Local>,
 }
 
 impl LatestTask {
@@ -17,7 +17,7 @@ impl LatestTask {
             if fs::metadata(LATEST_TASK_FILE_LOCATION).is_err() {
                 return LatestTask {
                     task_id: -1,
-                    date_time_performed: Local::now().to_string(),
+                    date_time_performed: Local::now(),
                 };
             }
             let data = fs::read_to_string(LATEST_TASK_FILE_LOCATION).expect(&format!(
@@ -32,7 +32,7 @@ impl LatestTask {
         // TODO: Handle directory not exists
         let latest_task = LatestTask {
             task_id,
-            date_time_performed: Local::now().to_string(),
+            date_time_performed: Local::now(),
         };
         fs::write(
             LATEST_TASK_FILE_LOCATION,
@@ -49,15 +49,15 @@ impl LatestTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, Local};
+    use chrono::Local;
     use std::fs;
 
     /// Helper function to parse the `date_time_performed` and allow time comparison with tolerance
-    fn assert_date_time_close(expected: &str, actual: &str) {
-        let expected_dt: DateTime<Local> =
-            expected.parse().expect("Failed to parse expected datetime");
-        let actual_dt: DateTime<Local> = actual.parse().expect("Failed to parse actual datetime");
-        let difference = (expected_dt - actual_dt).num_seconds().abs();
+    fn assert_date_time_close(
+        expected: &chrono::DateTime<Local>,
+        actual: &chrono::DateTime<Local>,
+    ) {
+        let difference = (*expected - *actual).num_seconds().abs();
         assert!(
             difference <= 5,
             "Timestamps are too far apart: expected = {}, actual = {}, difference = {} seconds",
@@ -78,7 +78,7 @@ mod tests {
 
         // Assert: Verify the task data
         assert_eq!(task.task_id, -1);
-        assert_date_time_close(&task.date_time_performed, &Local::now().to_string());
+        assert_date_time_close(&task.date_time_performed, &Local::now());
 
         // Test: Create a new task
         LatestTask::update_latest_task_performed(1);
@@ -87,7 +87,7 @@ mod tests {
         let data = fs::read_to_string(LATEST_TASK_FILE_LOCATION).expect("Failed to read test file");
         let task: LatestTask = serde_json::from_str(&data).expect("Failed to parse JSON");
         assert_eq!(task.task_id, 1);
-        assert_date_time_close(&task.date_time_performed, &Local::now().to_string());
+        assert_date_time_close(&task.date_time_performed, &Local::now());
 
         // Test: Update a task
         LatestTask::update_latest_task_performed(2);
@@ -96,13 +96,13 @@ mod tests {
         let data = fs::read_to_string(LATEST_TASK_FILE_LOCATION).expect("Failed to read test file");
         let task: LatestTask = serde_json::from_str(&data).expect("Failed to parse JSON");
         assert_eq!(task.task_id, 2);
-        assert_date_time_close(&task.date_time_performed, &Local::now().to_string());
+        assert_date_time_close(&task.date_time_performed, &Local::now());
 
         // Test: Read the task
         let task = LatestTask::get_latest_task_performed();
 
         // Assert: Verify the task data
         assert_eq!(task.task_id, 2);
-        assert_date_time_close(&task.date_time_performed, &Local::now().to_string());
+        assert_date_time_close(&task.date_time_performed, &Local::now());
     }
 }
