@@ -1,5 +1,5 @@
-use chrono::{Local, NaiveDate};
-use egui::Button;
+use chrono::{Duration, Local, NaiveDate};
+use egui::{Button, FontId, RichText};
 
 use crate::task_list::{TaskList, TaskListItem};
 
@@ -65,7 +65,29 @@ impl TaskListWidget {
 }
 impl egui::Widget for &mut TaskListWidget {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.label(format!("Listing all tasks for {}", self.date));
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new("Task List").font(FontId::proportional(40.0)));
+        });
+        ui.columns(3, |columns| {
+            columns[0].vertical_centered_justified(|ui| {
+                if ui.button("<").clicked() {
+                    self.date = self.date - Duration::days(1);
+                    self.task_list.change_date(self.date);
+                    self.tasks_to_display_require_reload = true;
+                }
+            });
+            columns[1].vertical_centered(|ui| ui.label(self.date.to_string()));
+            columns[2].vertical_centered_justified(|ui| {
+                if ui
+                    .add_enabled(self.date < Local::now().date_naive(), Button::new(">"))
+                    .clicked()
+                {
+                    self.date = self.date + Duration::days(1);
+                    self.task_list.change_date(self.date);
+                    self.tasks_to_display_require_reload = true;
+                }
+            });
+        });
 
         // Collect tasks into a temporary vector to avoid borrowing conflicts
         if self.tasks_to_display_require_reload {
