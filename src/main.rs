@@ -1,7 +1,14 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+};
 
 use chrono::Local;
-use kronos::{task_list::TaskList, widget::task_list_widget::TaskListWidget};
+use kronos::{
+    kronos_manager::{self, KronosManager},
+    task_list::TaskList,
+    widget::task_list_widget::TaskListWidget,
+};
 use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Debug)]
@@ -11,6 +18,7 @@ enum Command {
     CloseTaskList,
     // SpawnTaskPrompt,
     // CloseTaskPrompt,
+    Exit,
 }
 
 #[tokio::main]
@@ -18,26 +26,48 @@ async fn main() {
     // let connection = Arc::new(Mutex::new(kronos::establish_connection()));
 
     let (tx, mut rx) = mpsc::channel::<Command>(32);
-    let tx2 = tx.clone();
-    let manager = tokio::spawn(async move {
-        // Establish a connection to the server
 
-        // Start receiving messages
-        while let Some(cmd) = rx.recv().await {
-            use Command::*;
+    // spawn_task_list(tx.clone()).await;
+    // let manager = tokio::spawn(async move {
+    //     // Establish a connection to the server
 
-            match cmd {
-                // UpdateSettings => todo!(),
-                OpenTaskList => spawn_task_list(tx.clone()).await,
-                CloseTaskList => todo!(),
-                // CloseTaskPrompt => todo!(),
-                // SpawnTaskPrompt => todo!(),
-            }
-        }
+    //     // Start receiving messages
+    let mut kronos_manager = KronosManager::new();
+    let kronos_run_thread = thread::spawn(|| {
+        // tokio::spawn(async {
+        //     // &kronos_manager.start().await;
+        // });
     });
 
-    tx2.clone().send(Command::OpenTaskList).await.unwrap();
-    manager.is_finished();
+    while let Some(cmd) = kronos_manager.rx.recv().await {
+        match cmd {
+            kronos_manager::KronosState::UiOpen => (),
+            kronos_manager::KronosState::PendingPrompt => (),
+            kronos_manager::KronosState::AwaitingPrompt => {
+                kronos_manager.change_state(kronos_manager::KronosState::UiOpen);
+                spawn_task_list(tx.clone()).await;
+                kronos_manager.change_state(kronos_manager::KronosState::PendingPrompt);
+            }
+            kronos_manager::KronosState::Closed => break,
+        }
+    }
+    // tx.send(Command::OpenTaskList).await.unwrap();
+    // while let Some(cmd) = rx.recv().await {
+    //     use Command::*;
+
+    //     match cmd {
+    //         // UpdateSettings => todo!(),
+    //         OpenTaskList => spawn_task_list(tx.clone()).await,
+    //         CloseTaskList => tx.send(Command::Exit).await.unwrap(),
+    //         // CloseTaskPrompt => todo!(),
+    //         // SpawnTaskPrompt => todo!(),
+    //         Exit => break,
+    //     }
+    // }
+
+    // });
+    // manager.is_finished();
+    kronos_run_thread.join().unwrap();
 }
 
 async fn spawn_task_list(tx: Sender<Command>) {
