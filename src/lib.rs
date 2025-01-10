@@ -1,8 +1,8 @@
-pub mod kronos_manager;
 pub mod model;
 pub mod schema;
 pub mod task_list;
 pub mod task_prompt;
+pub mod task_prompt_manager;
 pub mod widget;
 
 use diesel::prelude::*;

@@ -1,15 +1,16 @@
 use std::{
     sync::{Arc, Mutex},
     thread,
+    time::Duration,
 };
 
 use chrono::Local;
 use kronos::{
-    kronos_manager::{self, KronosManager},
     task_list::TaskList,
-    widget::task_list_widget::TaskListWidget,
+    task_prompt::TaskPrompt,
+    task_prompt_manager::{self, TaskPromptManager},
+    widget::{task_list_widget::TaskListWidget, task_prompt_widget::TaskPromptWidget},
 };
-use tokio::sync::mpsc::{self, Sender};
 
 #[derive(Debug)]
 enum Command {
@@ -23,58 +24,37 @@ enum Command {
 
 #[tokio::main]
 async fn main() {
-    // let connection = Arc::new(Mutex::new(kronos::establish_connection()));
+    let mut task_prompt_manager = TaskPromptManager::new();
 
-    let (tx, mut rx) = mpsc::channel::<Command>(32);
+    task_prompt_manager.start().await;
 
-    // spawn_task_list(tx.clone()).await;
-    // let manager = tokio::spawn(async move {
-    //     // Establish a connection to the server
-
-    //     // Start receiving messages
-    let mut kronos_manager = KronosManager::new();
-    let kronos_run_thread = thread::spawn(|| {
-        // tokio::spawn(async {
-        //     // &kronos_manager.start().await;
-        // });
-    });
-
-    while let Some(cmd) = kronos_manager.rx.recv().await {
+    let mut task_prompt_manager_rx = task_prompt_manager.subscribe();
+    while let Ok(cmd) = task_prompt_manager_rx.recv().await {
         match cmd {
-            kronos_manager::KronosState::UiOpen => (),
-            kronos_manager::KronosState::PendingPrompt => (),
-            kronos_manager::KronosState::AwaitingPrompt => {
-                kronos_manager.change_state(kronos_manager::KronosState::UiOpen);
-                spawn_task_list(tx.clone()).await;
-                kronos_manager.change_state(kronos_manager::KronosState::PendingPrompt);
+            task_prompt_manager::TaskPromptManagerState::UiOpen => (),
+            task_prompt_manager::TaskPromptManagerState::PendingPrompt => (),
+            task_prompt_manager::TaskPromptManagerState::AwaitingPrompt => {
+                task_prompt_manager
+                    .change_state(task_prompt_manager::TaskPromptManagerState::UiOpen);
+                spawn_task_prompt();
+                // spawn_task_list(true);
+                task_prompt_manager
+                    .change_state(task_prompt_manager::TaskPromptManagerState::PendingPrompt);
+                spawn_fake_window();
             }
-            kronos_manager::KronosState::Closed => break,
+            task_prompt_manager::TaskPromptManagerState::Stopped => break,
         }
     }
-    // tx.send(Command::OpenTaskList).await.unwrap();
-    // while let Some(cmd) = rx.recv().await {
-    //     use Command::*;
 
-    //     match cmd {
-    //         // UpdateSettings => todo!(),
-    //         OpenTaskList => spawn_task_list(tx.clone()).await,
-    //         CloseTaskList => tx.send(Command::Exit).await.unwrap(),
-    //         // CloseTaskPrompt => todo!(),
-    //         // SpawnTaskPrompt => todo!(),
-    //         Exit => break,
-    //     }
-    // }
-
-    // });
-    // manager.is_finished();
-    kronos_run_thread.join().unwrap();
+    task_prompt_manager.stop().await;
 }
 
-async fn spawn_task_list(tx: Sender<Command>) {
+fn spawn_task_list(spawn_active: bool) {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_always_on_top()
-            .with_inner_size([600.0, 600.0]),
+            .with_inner_size([600.0, 600.0])
+            .with_active(spawn_active)
+            .with_visible(spawn_active),
         ..Default::default()
     };
 
@@ -83,11 +63,53 @@ async fn spawn_task_list(tx: Sender<Command>) {
         Local::now().date_naive(),
     ));
 
-    eframe::run_simple_native("My egui App", native_options, move |ctx, _frame| {
+    eframe::run_simple_native("Task List", native_options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(&mut task_list_widget);
+            // ui.ctx()
+            //     .send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+            // println!("{}", ui.is_visible());
+            // ui.vis
+            // thread::sleep(Duration::from_secs(2));
         });
     })
     .unwrap();
-    tx.send(Command::CloseTaskList).await.unwrap();
+    println!("exits");
+    // tx.send(Command::CloseTaskList).await.unwrap();
+}
+
+fn spawn_task_prompt() {
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_always_on_top()
+            .with_inner_size([320.0, 240.0]),
+        ..Default::default()
+    };
+
+    let mut task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(Arc::new(Mutex::new(
+        kronos::establish_connection(),
+    ))));
+
+    eframe::run_simple_native("Task Prompt", native_options, move |ctx, _frame| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.add(&mut task_prompt_widget);
+        });
+    })
+    .unwrap();
+}
+
+fn spawn_fake_window() {
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_active(false)
+            .with_inner_size([0.0, 0.0])
+            .with_visible(false),
+        ..Default::default()
+    };
+    eframe::run_simple_native("Kronos", native_options, move |ctx, _frame| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        });
+    })
+    .unwrap();
 }
