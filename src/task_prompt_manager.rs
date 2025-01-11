@@ -16,8 +16,8 @@ pub enum TaskPromptManagerState {
 const SLEEP_DURATION_MILLIS: u64 = 3000;
 
 pub struct TaskPromptManager {
-    state: Arc<std::sync::Mutex<TaskPromptManagerState>>,
-    tx: mpsc::Sender<TaskPromptManagerState>,
+    state: Arc<Mutex<TaskPromptManagerState>>,
+    pub tx: mpsc::Sender<TaskPromptManagerState>,
     rx: Arc<Mutex<mpsc::Receiver<TaskPromptManagerState>>>,
     broadcast_tx: broadcast::Sender<TaskPromptManagerState>,
     task_prompt_manager_join_handle: Option<JoinHandle<()>>,
@@ -28,7 +28,7 @@ impl TaskPromptManager {
         let (tx, rx) = mpsc::channel::<TaskPromptManagerState>(8);
         let (broadcast_tx, _) = broadcast::channel::<TaskPromptManagerState>(8);
         TaskPromptManager {
-            state: Arc::new(std::sync::Mutex::new(TaskPromptManagerState::Stopped)),
+            state: Arc::new(Mutex::new(TaskPromptManagerState::Stopped)),
             tx,
             rx: Arc::new(Mutex::new(rx)),
             broadcast_tx,
@@ -40,7 +40,7 @@ impl TaskPromptManager {
         self.broadcast_tx.subscribe()
     }
 
-    pub async fn get_state(&self) -> TaskPromptManagerState {
+    pub fn get_state(&self) -> TaskPromptManagerState {
         return self.state.lock().unwrap().clone();
     }
 
@@ -54,9 +54,9 @@ impl TaskPromptManager {
         let rx = Arc::clone(&self.rx);
         let rt = tokio::runtime::Runtime::new().unwrap();
         let broadcast_tx = self.broadcast_tx.clone();
-        let state = Arc::clone(&self.state);
 
         *self.state.lock().unwrap() = TaskPromptManagerState::PendingPrompt;
+        let state = Arc::clone(&self.state);
 
         let _ = broadcast_tx.send(TaskPromptManagerState::PendingPrompt);
 
@@ -85,7 +85,6 @@ impl TaskPromptManager {
                         rt.block_on(async {
                             match rx.recv().await {
                                 Some(new_state) => {
-                                    println!("> {:?}", new_state);
                                     *state.lock().unwrap() = new_state.clone();
                                 }
                                 None => todo!(),
@@ -108,8 +107,6 @@ impl Drop for TaskPromptManager {
 
         let sender = self.tx.clone();
 
-        let _ = self.broadcast_tx.send(TaskPromptManagerState::Stopped);
-
         if let Some(handle) = self.task_prompt_manager_join_handle.take() {
             thread::spawn(|| {
                 let runtime = tokio::runtime::Builder::new_current_thread()
@@ -127,13 +124,14 @@ impl Drop for TaskPromptManager {
 
             handle.join().unwrap();
         }
+
+        let _ = self.broadcast_tx.send(TaskPromptManagerState::Stopped);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use broadcast::error::TryRecvError;
     use rstest::rstest;
 
     async fn change_state(
@@ -153,7 +151,7 @@ mod tests {
     async fn test_initial_state() {
         let manager = TaskPromptManager::new();
         assert_eq!(
-            manager.get_state().await,
+            manager.get_state(),
             TaskPromptManagerState::Stopped,
             "Initial state should be Stopped"
         );
@@ -164,7 +162,7 @@ mod tests {
     async fn test_start_changes_state_to_pending_prompt() {
         let mut manager = TaskPromptManager::new();
         manager.start();
-        let state = manager.get_state().await;
+        let state = manager.get_state();
 
         assert_eq!(
             state,
@@ -175,9 +173,17 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_drop() {
+    async fn test_start_then_drop() {
         let mut manager = TaskPromptManager::new();
         manager.start();
+
+        std::mem::drop(manager);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_drop_immediate() {
+        let manager = TaskPromptManager::new();
 
         std::mem::drop(manager);
     }
@@ -190,7 +196,7 @@ mod tests {
 
         change_state(&mut manager, TaskPromptManagerState::Stopped).await;
 
-        let state = manager.get_state().await;
+        let state = manager.get_state();
 
         assert_eq!(
             state,
@@ -220,14 +226,13 @@ mod tests {
         tx.send(TaskPromptManagerState::UiOpen).await.unwrap();
 
         tokio::time::sleep(Duration::from_millis(100)).await; // TODO rust awaitility
-        let state = manager.get_state().await;
+        let state = manager.get_state();
 
         assert_eq!(
             state,
             TaskPromptManagerState::UiOpen,
             "State should transition to UiOpen when sent via mpsc channel"
         );
-        println!("PASSED~");
     }
 
     #[rstest]
@@ -251,7 +256,7 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_broadcast_receiver_exhaustion() {
+    async fn test_broadcast_no_more_receivers() {
         let mut manager = TaskPromptManager::new();
         manager.start();
 
@@ -266,11 +271,9 @@ mod tests {
             "Broadcast receiver should receive AwaitingPrompt state"
         );
 
-        assert_eq!(
-            subscriber.try_recv(),
-            Err(TryRecvError::Empty),
-            "Expected broadcast channel to be exhausted."
-        );
+        std::mem::drop(subscriber);
+
+        change_state(&mut manager, TaskPromptManagerState::PendingPrompt).await;
     }
 
     #[rstest]
@@ -279,11 +282,42 @@ mod tests {
         let mut manager = TaskPromptManager::new();
         manager.start();
 
-        change_state(&mut manager, TaskPromptManagerState::PendingPrompt).await;
-
         tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS + 500)).await; // Wait for sleep duration
-        let state = manager.get_state().await;
+        let state = manager.get_state();
 
+        assert_eq!(
+            state,
+            TaskPromptManagerState::AwaitingPrompt,
+            "State should transition to AwaitingPrompt after sleep duration"
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_state_change_resets_sleep_duration() {
+        let mut manager = TaskPromptManager::new();
+        manager.start();
+
+        tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS / 2)).await;
+
+        // Reset the prompt timer
+        manager
+            .tx
+            .clone()
+            .send(TaskPromptManagerState::PendingPrompt)
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS / 2 + 500)).await; // Wait for sleep duration
+        let state = manager.get_state();
+        assert_eq!(
+            state,
+            TaskPromptManagerState::PendingPrompt,
+            "State should still be PendingPrompt after reset"
+        );
+
+        tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS / 2)).await;
+        let state = manager.get_state();
         assert_eq!(
             state,
             TaskPromptManagerState::AwaitingPrompt,
