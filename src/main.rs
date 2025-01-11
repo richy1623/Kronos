@@ -1,139 +1,162 @@
-// use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex};
 
-// use chrono::Local;
-// use kronos::{
-//     task_list::TaskList,
-//     task_prompt::TaskPrompt,
-//     task_prompt_manager::{self, TaskPromptManager, TaskPromptManagerState},
-//     widget::{task_list_widget::TaskListWidget, task_prompt_widget::TaskPromptWidget},
-// };
-// use tokio::sync::broadcast::Receiver;
+use chrono::Local;
+use kronos::{
+    task_list::TaskList,
+    task_prompt::TaskPrompt,
+    task_prompt_manager::{self, TaskPromptManager, TaskPromptManagerState},
+    widget::{task_list_widget::TaskListWidget, task_prompt_widget::TaskPromptWidget},
+};
 
-// #[derive(Debug)]
-// enum Command {
-//     // UpdateSettings,
-//     OpenTaskList,
-//     CloseTaskList,
-//     // SpawnTaskPrompt,
-//     // CloseTaskPrompt,
-//     Exit,
-// }
+#[tokio::main]
+async fn main() {
+    let mut task_prompt_manager = TaskPromptManager::new();
 
-// #[tokio::main]
-// async fn main() {
-//     let mut task_prompt_manager = TaskPromptManager::new();
+    task_prompt_manager.start();
 
-//     task_prompt_manager.start().await;
+    let mut task_prompt_manager_rx = task_prompt_manager.subscribe();
+    while let Ok(cmd) = task_prompt_manager_rx.recv().await {
+        match cmd {
+            task_prompt_manager::TaskPromptManagerState::UiOpen => (),
+            task_prompt_manager::TaskPromptManagerState::PendingPrompt => (),
+            task_prompt_manager::TaskPromptManagerState::AwaitingPrompt => {
+                task_prompt_manager
+                    .tx
+                    .send(TaskPromptManagerState::UiOpen)
+                    .await
+                    .unwrap();
+                spawn_task_prompt();
+                // spawn_fake_window();
+                spawn_task_list(false, &mut task_prompt_manager);
+            }
+            task_prompt_manager::TaskPromptManagerState::Stopped => break,
+        }
+    }
+}
 
-//     let mut task_prompt_manager_rx = task_prompt_manager.subscribe();
-//     while let Ok(cmd) = task_prompt_manager_rx.recv().await {
-//         match cmd {
-//             task_prompt_manager::TaskPromptManagerState::UiOpen => (),
-//             task_prompt_manager::TaskPromptManagerState::PendingPrompt => (),
-//             task_prompt_manager::TaskPromptManagerState::AwaitingPrompt => {
-//                 task_prompt_manager
-//                     .change_state(task_prompt_manager::TaskPromptManagerState::UiOpen);
-//                 spawn_task_prompt();
-//                 spawn_task_list(false, &mut task_prompt_manager);
-//                 task_prompt_manager
-//                     .change_state(task_prompt_manager::TaskPromptManagerState::PendingPrompt);
-//                 spawn_fake_window();
-//             }
-//             task_prompt_manager::TaskPromptManagerState::Stopped => break,
-//         }
-//     }
+fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) {
+    let mut task_prompt_manager_rx = task_prompt_manager.subscribe();
 
-//     task_prompt_manager.stop().await;
-// }
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([600.0, 600.0])
+            .with_visible(spawn_active)
+            .with_active(spawn_active),
+        ..Default::default()
+    };
 
-// fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) {
-//     let mut task_prompt_manager_rx = task_prompt_manager.subscribe();
+    let mut task_list_widget = TaskListWidget::new(TaskList::new(
+        Arc::new(Mutex::new(kronos::establish_connection())),
+        Local::now().date_naive(),
+    ));
 
-//     let native_options = eframe::NativeOptions {
-//         viewport: egui::ViewportBuilder::default()
-//             .with_inner_size([600.0, 600.0])
-//             .with_active(spawn_active)
-//             .with_visible(spawn_active),
-//         ..Default::default()
-//     };
+    let mut open_task_prompt = false;
+    let mut was_minimized = false;
 
-//     let mut task_list_widget = TaskListWidget::new(TaskList::new(
-//         Arc::new(Mutex::new(kronos::establish_connection())),
-//         Local::now().date_naive(),
-//     ));
+    let tx = task_prompt_manager.tx.clone();
 
-//     let mut open_task_prompt = false;
-//     let mut was_minimized = true;
+    let mut minimize_on_spawn = !spawn_active;
 
-//     let change_state_to_pending_prompt = || {
-//         task_prompt_manager.change_state(TaskPromptManagerState::PendingPrompt);
-//     };
+    eframe::run_simple_native("Task List", native_options, move |ctx, _frame| {
+        if minimize_on_spawn {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+            minimize_on_spawn = false;
+        }
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.add(&mut task_list_widget);
 
-//     eframe::run_simple_native("Task List", native_options, move |ctx, _frame| {
-//         egui::CentralPanel::default().show(ctx, |ui| {
-//             ui.add(&mut task_list_widget);
+            let is_minimized = ui.ctx().input(|i| i.viewport().minimized).unwrap();
+            if is_minimized {
+                // Perform updates while minimized
+                ui.ctx().request_repaint_after_secs(1.0); // Force repaint to keep updates flowing
+            }
+            if is_minimized != was_minimized {
+                let tx = tx.clone();
+                let tokio_runtime = tokio::runtime::Builder::new_current_thread()
+                    .build()
+                    .unwrap();
 
-//             let is_minimized = ui.ctx().input(|i| i.viewport().minimized).unwrap();
-//             if is_minimized && !was_minimized {
-//                 change_state_to_pending_prompt();
-//             }
+                let state = if is_minimized {
+                    TaskPromptManagerState::PendingPrompt
+                } else {
+                    TaskPromptManagerState::UiOpen
+                };
 
-//             was_minimized = is_minimized;
+                tokio_runtime.spawn_blocking(move || {
+                    tx.blocking_send(state).unwrap();
+                });
+                tokio_runtime.shutdown_background();
+            }
 
-//             let close_requested = ui.ctx().input(|i| i.viewport().close_requested());
+            was_minimized = is_minimized;
 
-//             open_task_prompt = open_task_prompt
-//                 || task_prompt_manager_rx.try_recv().unwrap()
-//                     == TaskPromptManagerState::AwaitingPrompt;
+            // let close_requested = ui.ctx().input(|i| i.viewport().close_requested());
 
-//             dbg!(is_minimized);
-//             // ui.ctx()
-//             //     .send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-//             // println!("{}", ui.is_visible());
-//             // ui.vis
-//             // thread::sleep(Duration::from_secs(2));
+            open_task_prompt = open_task_prompt
+                || task_prompt_manager_rx
+                    .try_recv()
+                    .map(|state| state == TaskPromptManagerState::AwaitingPrompt)
+                    .unwrap_or(false);
 
-//             if close_requested && open_task_prompt {}
-//         });
-//     })
-//     .unwrap();
-//     // println!(was_minimized);
-//     println!("exits");
-//     // tx.send(Command::CloseTaskList).await.unwrap();
-// }
+            // dbg!(is_minimized);
+            // ui.ctx()
+            //     .send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+            // println!("{}", ui.is_visible());
+            // ui.vis
+            // thread::sleep(Duration::from_secs(2));
 
-// fn spawn_task_prompt() {
-//     let native_options = eframe::NativeOptions {
-//         viewport: egui::ViewportBuilder::default()
-//             .with_always_on_top()
-//             .with_inner_size([320.0, 240.0]),
-//         ..Default::default()
-//     };
+            if open_task_prompt {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        });
+    })
+    .unwrap();
 
-//     let mut task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(Arc::new(Mutex::new(
-//         kronos::establish_connection(),
-//     ))));
+    if task_prompt_manager.get_state() != TaskPromptManagerState::AwaitingPrompt {
+        task_prompt_manager
+            .tx
+            .clone()
+            .try_send(TaskPromptManagerState::Stopped)
+            .unwrap();
+    }
+    // println!(was_minimized);
+    println!("exits");
+    // tx.send(Command::CloseTaskList).await.unwrap();
+}
 
-//     eframe::run_simple_native("Task Prompt", native_options, move |ctx, _frame| {
-//         egui::CentralPanel::default().show(ctx, |ui| {
-//             ui.add(&mut task_prompt_widget);
-//         });
-//     })
-//     .unwrap();
-// }
+fn spawn_task_prompt() {
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_always_on_top()
+            .with_inner_size([320.0, 240.0]),
+        ..Default::default()
+    };
 
-// fn spawn_fake_window() {
-//     let native_options = eframe::NativeOptions {
-//         viewport: egui::ViewportBuilder::default()
-//             .with_active(false)
-//             .with_inner_size([0.0, 0.0])
-//             .with_visible(false),
-//         ..Default::default()
-//     };
-//     eframe::run_simple_native("Kronos", native_options, move |ctx, _frame| {
-//         egui::CentralPanel::default().show(ctx, |ui| {
-//             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-//         });
-//     })
-//     .unwrap();
-// }
+    let mut task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(Arc::new(Mutex::new(
+        kronos::establish_connection(),
+    ))));
+
+    eframe::run_simple_native("Task Prompt", native_options, move |ctx, _frame| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.add(&mut task_prompt_widget);
+        });
+    })
+    .unwrap();
+}
+
+#[allow(unused)]
+fn spawn_fake_window() {
+    let native_options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_active(false)
+            .with_inner_size([0.0, 0.0])
+            .with_visible(false),
+        ..Default::default()
+    };
+    eframe::run_simple_native("Kronos", native_options, move |ctx, _frame| {
+        egui::CentralPanel::default().show(ctx, |_ui| {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        });
+    })
+    .unwrap();
+}
