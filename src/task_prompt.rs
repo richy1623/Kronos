@@ -38,11 +38,8 @@ impl TaskPrompt {
     pub fn update_task(&mut self) {
         let mut connection = &mut self.db_connection.lock().unwrap();
 
-        let task = Task::get_task_by_name(&self.task_name_option, &mut connection);
-        let task = match task {
-            Some(task) => Task::update_task_last_used(&task.name, connection).unwrap(),
-            None => Task::create_task(&self.task_name_option, connection).unwrap(),
-        };
+        let task =
+            Task::get_or_create_task_with_update(&self.task_name_option, &mut connection).unwrap();
 
         let current_date = Local::now().date_naive().to_string();
 

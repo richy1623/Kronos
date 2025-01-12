@@ -65,6 +65,19 @@ impl Task {
         }
     }
 
+    pub fn get_or_create_task_with_update(
+        task_name: &str,
+        connection: &mut SqliteConnection,
+    ) -> Result<Self, Error> {
+        let task = Task::get_task_by_name(task_name, connection);
+        match task {
+            Some(task) => {
+                Task::update_task_last_used(&task.name, connection)
+            }
+            None => Task::create_task(task_name, connection),
+        }
+    }
+
     pub fn get_all_matching_tasks(
         search_string: &str,
         connection: &mut SqliteConnection,
@@ -237,6 +250,59 @@ mod tests {
                 .unwrap();
 
         assert!(task_before_update.last_used < task_after_update.last_used);
+    }
+
+    #[rstest]
+    fn get_or_create_task(database_connection_fixture: &Arc<Mutex<SqliteConnection>>) {
+        let mut database_connection_fixture = database_connection_fixture.lock().unwrap();
+
+        let task =
+            Task::create_task("get_or_create_task", &mut database_connection_fixture).unwrap();
+
+        let same_task_fetched = Task::get_or_create_task_with_update(
+            "get_or_create_task",
+            &mut database_connection_fixture,
+        )
+        .unwrap();
+        assert_eq!(task.id, same_task_fetched.id);
+
+        let new_same_task_fetched = Task::get_or_create_task_with_update(
+            "get_or_create_task_new",
+            &mut database_connection_fixture,
+        )
+        .unwrap();
+        assert_ne!(task.id, new_same_task_fetched.id);
+    }
+
+    #[rstest]
+    fn get_or_create_task_with_update(database_connection_fixture: &Arc<Mutex<SqliteConnection>>) {
+        let mut database_connection_fixture = database_connection_fixture.lock().unwrap();
+
+        let task_before_update = Task::create_task(
+            "get_or_create_task_with_update",
+            &mut database_connection_fixture,
+        )
+        .unwrap();
+
+        thread::sleep(Duration::from_millis(1000));
+
+        let task_after_update = Task::get_or_create_task_with_update(
+            "get_or_create_task_with_update",
+            &mut database_connection_fixture,
+        )
+        .unwrap();
+        assert_eq!(task_before_update.id, task_after_update.id);
+        assert!(task_before_update.last_used < task_after_update.last_used, 
+            "Expected task before to have an earlier time than after the update. Times were [task_before_update: {}, task_after_update: {}]",
+            task_before_update.last_used,task_after_update.last_used);
+
+        let new_task = Task::get_or_create_task_with_update(
+            "get_or_create_task_with_update_new",
+            &mut database_connection_fixture,
+        )
+        .unwrap();
+        assert_ne!(task_before_update.id, new_task.id);
+        assert!(task_before_update.last_used < new_task.last_used);
     }
 
     #[rstest]
