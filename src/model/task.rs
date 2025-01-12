@@ -1,4 +1,4 @@
-use crate::schema::task;
+use crate::schema::{task, task_performed};
 use diesel::{prelude::*, result::Error};
 use regex::Regex;
 
@@ -102,25 +102,52 @@ impl Task {
             .take(10)
             .collect()
     }
+
+    //TODO call this on delete_task_performed or on startup
+    pub fn delete_unused_tasks(connection: &mut SqliteConnection) -> Result<usize, Error> {
+        diesel::delete(task::table)
+            .filter(
+                task::id.ne_all(
+                    task_performed::table
+                        .select(task_performed::task_id)
+                        .filter(task_performed::task_id.eq(task::id)),
+                ),
+            )
+            .execute(connection)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{
+        fs,
         sync::{Arc, Mutex},
         thread,
         time::Duration,
     };
 
-    use crate::establish_connection;
+    use crate::{model::task_performed::TaskPerformed, MIGRATIONS};
 
     use super::*;
+    use diesel_migrations::MigrationHarness;
     use rstest::*;
+
+    const DATABASE_URL: &str = "test/task_test_database.db";
 
     #[fixture]
     #[once]
     pub fn database_connection_fixture() -> Arc<Mutex<SqliteConnection>> {
-        let connection = Arc::new(Mutex::new(establish_connection()));
+        fs::create_dir_all("test").unwrap();
+        let connection = Arc::new(Mutex::new(
+            SqliteConnection::establish(&DATABASE_URL)
+                .unwrap_or_else(|_| panic!("Error connecting to {}", DATABASE_URL)),
+        ));
+        connection
+            .lock()
+            .unwrap()
+            .run_pending_migrations(MIGRATIONS)
+            .unwrap();
+
         diesel::delete(task::table)
             .execute(&mut *connection.lock().unwrap())
             .expect("Failed to delete all records from table `task`");
@@ -255,6 +282,45 @@ mod tests {
 
         // Check the generated regex pattern
         assert_eq!(regex.to_string(), expected_pattern);
+    }
+
+    #[rstest]
+    fn delete_unused_tasks(database_connection_fixture: &Arc<Mutex<SqliteConnection>>) {
+        let mut database_connection_fixture: std::sync::MutexGuard<'_, SqliteConnection> =
+            database_connection_fixture.lock().unwrap();
+
+        diesel::delete(task::table)
+            .execute(&mut *database_connection_fixture)
+            .expect("Failed to delete all records from table `task`");
+
+        let task_to_delete =
+            Task::create_task("orphaned_task", &mut database_connection_fixture).unwrap();
+        let task_to_save =
+            Task::create_task("relevant_task", &mut database_connection_fixture).unwrap();
+
+        TaskPerformed::insert_task_performed(
+            &TaskPerformed {
+                date: String::from("1999-09-05"),
+                task_id: task_to_save.id,
+                time_spent: 21,
+            },
+            &mut database_connection_fixture,
+        )
+        .unwrap();
+
+        let deleted_tasks = Task::delete_unused_tasks(&mut database_connection_fixture).unwrap();
+
+        assert_eq!(deleted_tasks, 1);
+
+        assert_eq!(
+            Task::get_task_by_id(task_to_delete.id, &mut database_connection_fixture),
+            None
+        );
+
+        assert_eq!(
+            Task::get_task_by_id(task_to_save.id, &mut database_connection_fixture),
+            Some(task_to_save)
+        );
     }
 
     // #[rstest]

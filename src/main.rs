@@ -68,7 +68,8 @@ fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) 
             let is_minimized = ui.ctx().input(|i| i.viewport().minimized).unwrap();
             if is_minimized {
                 // Perform updates while minimized
-                ui.ctx().request_repaint_after_secs(1.0); // Force repaint to keep updates flowing
+                // Force repaint to keep updates flowing
+                ui.ctx().request_repaint_after_secs(1.0);
             }
             if is_minimized != was_minimized {
                 let tx = tx.clone();
@@ -90,20 +91,11 @@ fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) 
 
             was_minimized = is_minimized;
 
-            // let close_requested = ui.ctx().input(|i| i.viewport().close_requested());
-
             open_task_prompt = open_task_prompt
                 || task_prompt_manager_rx
                     .try_recv()
                     .map(|state| state == TaskPromptManagerState::AwaitingPrompt)
                     .unwrap_or(false);
-
-            // dbg!(is_minimized);
-            // ui.ctx()
-            //     .send_viewport_cmd(egui::ViewportCommand::Minimized(true));
-            // println!("{}", ui.is_visible());
-            // ui.vis
-            // thread::sleep(Duration::from_secs(2));
 
             if open_task_prompt {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -119,9 +111,6 @@ fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) 
             .try_send(TaskPromptManagerState::Stopped)
             .unwrap();
     }
-    // println!(was_minimized);
-    println!("exits");
-    // tx.send(Command::CloseTaskList).await.unwrap();
 }
 
 fn spawn_task_prompt() {
@@ -149,8 +138,7 @@ fn spawn_fake_window() {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_active(false)
-            .with_inner_size([0.0, 0.0])
-            .with_visible(false),
+            .with_inner_size([0.0, 0.0]),
         ..Default::default()
     };
     eframe::run_simple_native("Kronos", native_options, move |ctx, _frame| {

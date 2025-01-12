@@ -165,17 +165,33 @@ impl TaskPerformed {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        fs,
+        sync::{Arc, Mutex},
+    };
 
-    use crate::{establish_connection, model::task::Task, schema::task};
+    use crate::{model::task::Task, schema::task, MIGRATIONS};
 
     use super::*;
+    use diesel_migrations::MigrationHarness;
     use rstest::*;
+
+    const DATABASE_URL: &str = "test/task_performed_test_database.db";
 
     #[fixture]
     #[once]
     pub fn database_connection_fixture() -> Arc<Mutex<SqliteConnection>> {
-        let connection = Arc::new(Mutex::new(establish_connection()));
+        fs::create_dir_all("test").unwrap();
+        let connection = Arc::new(Mutex::new(
+            SqliteConnection::establish(&DATABASE_URL)
+                .unwrap_or_else(|_| panic!("Error connecting to {}", DATABASE_URL)),
+        ));
+        connection
+            .lock()
+            .unwrap()
+            .run_pending_migrations(MIGRATIONS)
+            .unwrap();
+
         diesel::delete(task_performed::table)
             .execute(&mut *connection.lock().unwrap())
             .expect("Failed to delete all records from table `task_preformed`");

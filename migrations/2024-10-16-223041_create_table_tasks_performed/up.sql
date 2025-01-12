@@ -4,7 +4,7 @@ CREATE TABLE
         task_id INTEGER NOT NULL,
         time_spent INTEGER NOT NULL DEFAULT 0, -- Set default to 0
         PRIMARY KEY (date, task_id),
-        FOREIGN KEY (task_id) REFERENCES Task (id)
+        FOREIGN KEY (task_id) REFERENCES Task (id) ON DELETE CASCADE
     );
 
 -- Create an index on task_id for faster lookup
