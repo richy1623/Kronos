@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "streetsidesoftware.code-spell-checker",
+    "inferrinizzard.prettier-sql-vscode",
+    "qwtel.sqlite-viewer",
+    "rust-lang.rust-analyzer"
+  ]
+}
