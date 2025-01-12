@@ -1,0 +1,19 @@
+name: Rust
+
+on:
+  push:
+    branches: ["**"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    if: ${{ contains(github.event.head_commit.message, '[ci]') }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: cargo test --verbose
