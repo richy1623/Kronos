@@ -9,9 +9,11 @@ env:
 
 jobs:
   ci:
+    name: Continuous Integration Testing
     if: ${{ contains(github.event.head_commit.message, '[ci]') }}
 
     runs-on: ubuntu-latest
+    timeout-minutes: 7
 
     steps:
       - uses: actions/checkout@v4
