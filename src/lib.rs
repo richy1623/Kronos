@@ -10,6 +10,8 @@ use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
 use std::env;
 
+pub const DATA_STORAGE_PATH: &str = "data";
+
 pub const MIGRATIONS: EmbeddedMigrations = diesel_migrations::embed_migrations!();
 
 pub fn establish_connection() -> SqliteConnection {
