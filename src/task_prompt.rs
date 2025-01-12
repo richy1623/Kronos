@@ -17,7 +17,10 @@ impl TaskPrompt {
         let task_options = Task::fetch_most_recent_tasks(1000, &mut db_connection.lock().unwrap());
         let available_task_options = task_options.iter().map(|task| task.name.clone()).collect();
         TaskPrompt {
-            task_name_option: String::new(),
+            task_name_option: task_options
+                .first()
+                .map(|task| task.name.clone())
+                .unwrap_or(String::new()),
             task_options,
             available_task_options,
             latest_task_performed: LatestTask::get_latest_task_performed(),
@@ -35,8 +38,11 @@ impl TaskPrompt {
     pub fn update_task(&mut self) {
         let mut connection = &mut self.db_connection.lock().unwrap();
 
-        let task = Task::get_or_create_task(&self.task_name_option, &mut connection)
-            .expect("Get or Create Failed");
+        let task = Task::get_task_by_name(&self.task_name_option, &mut connection);
+        let task = match task {
+            Some(task) => Task::update_task_last_used(&task.name, connection).unwrap(),
+            None => Task::create_task(&self.task_name_option, connection).unwrap(),
+        };
 
         let current_date = Local::now().date_naive().to_string();
 

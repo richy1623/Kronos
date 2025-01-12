@@ -12,7 +12,7 @@ pub struct TaskPromptWidget {
 impl TaskPromptWidget {
     pub fn new(task_prompt: TaskPrompt) -> Self {
         let mut task_select_widget = TaskSelectWidget::new(
-            String::new(),
+            task_prompt.task_name_option.clone(),
             task_prompt
                 .task_options
                 .iter()
