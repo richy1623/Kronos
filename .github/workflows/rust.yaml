@@ -33,8 +33,17 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+
       - name: Run tests with coverage
         run: cargo tarpaulin --no-fail-fast --out xml
+
+      - name: Upload Coverage Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: cobertura.xml
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
