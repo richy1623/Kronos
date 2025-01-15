@@ -1,4 +1,4 @@
-name: Rust
+name: Rust CI and Coverage
 
 on:
   push:
@@ -8,12 +8,10 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  ci:
-    name: Continuous Integration Testing
-    if: ${{ contains(github.event.head_commit.message, '[ci]') }}
-
+  test:
+    name: Run Standard Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -33,14 +31,29 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
+  coverage:
+    name: Run Coverage Tests
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
-
-      - name: Cache Cargo bin (Tarpaulin)
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin
-          key: cargo-bin-${{ runner.os }}-tarpaulin
 
       - name: Run tests with coverage
         run: cargo tarpaulin --no-fail-fast --skip-clean --out xml
