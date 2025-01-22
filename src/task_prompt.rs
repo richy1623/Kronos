@@ -182,8 +182,6 @@ mod tests {
 
         let task_1 = Task::create_task("update_task_1", &mut connection).unwrap();
         LatestTask::update_latest_task_performed(None);
-        // LatestTask::update_latest_task_performed(task_1.id);
-        // std::mem::drop(connection);
 
         let current_date = Local::now().date_naive().to_string();
 
@@ -214,6 +212,13 @@ mod tests {
         );
 
         // Update to a new task
+        let latest_task = LatestTask {
+            task_id: Some(task_1.id),
+            date_time_performed: Local::now()
+                .checked_sub_signed(TimeDelta::minutes(1))
+                .unwrap(),
+        };
+        task_prompt.latest_task_performed = latest_task.clone();
         task_prompt.task_name_option = String::from("update_task_2");
 
         task_prompt.update_task();
@@ -226,7 +231,7 @@ mod tests {
             TaskPerformed {
                 date: current_date.clone(),
                 task_id: task_2.id,
-                time_spent: 0,
+                time_spent: 1,
                 is_synced_to_server: false
             }
         );
@@ -252,7 +257,7 @@ mod tests {
             TaskPerformed {
                 date: current_date.clone(),
                 task_id: task_2.id,
-                time_spent: 5,
+                time_spent: 6, // Additive for the same task
                 is_synced_to_server: false
             }
         );
