@@ -9,3 +9,6 @@ data/latest_task.json
 
 # Test
 test/
+
+# Coverage Report
+tarpaulin-report.html

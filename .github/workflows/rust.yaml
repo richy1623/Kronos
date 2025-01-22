@@ -56,7 +56,9 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Run tests with coverage
-        run: cargo tarpaulin --no-fail-fast --skip-clean --out xml
+        run:
+          cargo tarpaulin --no-fail-fast --target-dir "target/tarpaulin" --exclude-files "target/*" --skip-clean --out
+          xml
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
