@@ -2,7 +2,7 @@ use crate::schema::{task, task_performed};
 use diesel::{prelude::*, result::Error};
 use regex::Regex;
 
-#[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq)]
+#[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq, Clone)]
 #[diesel(table_name = crate::schema::task)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Task {

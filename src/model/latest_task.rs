@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::DATA_STORAGE_PATH;
 
-const LATEST_TASK_FILE_NAME: &str = "latest_task.json";
+pub const LATEST_TASK_FILE_NAME: &str = "latest_task.json";
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct LatestTask {
     pub task_id: Option<i32>,
     pub date_time_performed: chrono::DateTime<Local>,
@@ -39,15 +39,16 @@ impl LatestTask {
         }
     }
 
-    pub fn update_latest_task_performed(task_id: i32) -> Self {
+    pub fn update_latest_task_performed(task_id: Option<i32>) -> Self {
         if fs::metadata(crate::DATA_STORAGE_PATH).is_err() {
             fs::create_dir_all(crate::DATA_STORAGE_PATH).unwrap();
         }
 
         let latest_task = LatestTask {
-            task_id: Some(task_id),
+            task_id,
             date_time_performed: Local::now(),
         };
+        // TODO return Result
         fs::write(
             LatestTask::get_latest_task_file_path(),
             serde_json::to_string(&latest_task).expect("Failed to serialize"),
@@ -96,7 +97,7 @@ mod tests {
         assert_date_time_close(&task.date_time_performed, &Local::now());
 
         // Test: Create a new task
-        LatestTask::update_latest_task_performed(1);
+        LatestTask::update_latest_task_performed(Some(1));
 
         // Assert: Verify the file was created and contains the correct data
         let data = fs::read_to_string(LatestTask::get_latest_task_file_path())
@@ -106,7 +107,7 @@ mod tests {
         assert_date_time_close(&task.date_time_performed, &Local::now());
 
         // Test: Update a task
-        LatestTask::update_latest_task_performed(2);
+        LatestTask::update_latest_task_performed(Some(2));
 
         // Assert: Verify the file was updated with new data
         let data = fs::read_to_string(LatestTask::get_latest_task_file_path())
