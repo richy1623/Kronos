@@ -13,6 +13,8 @@ pub struct TaskPerformed {
     pub task_id: i32,
     /// The time spent performing the task.
     pub time_spent: i32,
+    /// If the current task performed has been synced with the external server
+    pub is_synced_to_server: bool,
 }
 
 impl TaskPerformed {
@@ -212,6 +214,7 @@ mod tests {
                 date: String::from("2000-08-14"),
                 task_id: task.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -236,6 +239,7 @@ mod tests {
                 date: String::from("2000-08-14"),
                 task_id: task1.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -246,6 +250,7 @@ mod tests {
                 date: String::from("2000-08-15"),
                 task_id: task1.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -256,6 +261,7 @@ mod tests {
                 date: String::from("2000-08-16"),
                 task_id: task2.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -282,6 +288,7 @@ mod tests {
                 date: String::from("2000-11-05"),
                 task_id: task1.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -292,6 +299,7 @@ mod tests {
                 date: String::from("1999-09-05"),
                 task_id: task1.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -302,6 +310,7 @@ mod tests {
                 date: String::from("2000-11-05"),
                 task_id: task2.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -326,6 +335,7 @@ mod tests {
                 date: String::from("2000-08-14"),
                 task_id: task.id,
                 time_spent: 21,
+                is_synced_to_server: false,
             },
             &mut connection,
         )
@@ -335,6 +345,7 @@ mod tests {
             date: String::from("2000-08-14"),
             task_id: task.id,
             time_spent: 27,
+            is_synced_to_server: false,
         };
 
         let updated_task =
@@ -362,6 +373,7 @@ mod tests {
             date: String::from("2000-08-14"),
             task_id: task.id,
             time_spent: 21,
+            is_synced_to_server: false,
         };
 
         let task_inserted =
@@ -389,6 +401,7 @@ mod tests {
             date: String::from("2000-08-14"),
             task_id: task.id,
             time_spent: 21,
+            is_synced_to_server: false,
         };
 
         TaskPerformed::insert_task_performed(&task_to_delete, &mut connection).unwrap();
@@ -440,6 +453,7 @@ mod tests {
             date: String::from("2000-08-14"),
             task_id: task.id,
             time_spent: 5,
+            is_synced_to_server: false,
         };
 
         let inserted_task =
@@ -452,6 +466,7 @@ mod tests {
             date: String::from("2000-08-14"),
             task_id: task.id,
             time_spent: 10,
+            is_synced_to_server: false,
         };
 
         let overwritten_task =

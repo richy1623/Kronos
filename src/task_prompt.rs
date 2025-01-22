@@ -59,6 +59,7 @@ impl TaskPrompt {
                     date: current_date,
                     task_id: task.id,
                     time_spent: time_spent_minutes,
+                    is_synced_to_server: false,
                 };
                 TaskPerformed::insert_task_performed(&task_performed, &mut connection)
                     .expect("Update Failed");

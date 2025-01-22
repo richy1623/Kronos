@@ -87,6 +87,7 @@ impl TaskList {
                         date: self.date.to_string(),
                         task_id: task.id,
                         time_spent,
+                        is_synced_to_server: false,
                     },
                     &mut connection,
                 )
@@ -133,6 +134,7 @@ impl TaskList {
             task_id,
             time_spent,
             date: self.date.to_string(),
+            is_synced_to_server: false,
         };
 
         if task_to_update.task_name != task_name {

@@ -9,6 +9,7 @@ pub struct Task {
     pub id: i32,
     pub name: String,
     pub last_used: i32,
+    pub is_synced_to_server: bool
 }
 
 impl Task {
@@ -385,6 +386,7 @@ mod tests {
                 date: String::from("1999-09-05"),
                 task_id: task_to_save.id,
                 time_spent: 21,
+                is_synced_to_server: false
             },
             &mut connection,
         )
