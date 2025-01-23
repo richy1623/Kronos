@@ -1,7 +1,8 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use chrono::Local;
 use kronos::{
+    model::latest_task::LatestTaskManager,
     task_list::TaskList,
     task_prompt::TaskPrompt,
     task_prompt_manager::{self, TaskPromptManager, TaskPromptManagerState},
@@ -10,6 +11,8 @@ use kronos::{
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
     let mut task_prompt_manager = TaskPromptManager::new();
 
     task_prompt_manager.start();
@@ -121,9 +124,10 @@ fn spawn_task_prompt() {
         ..Default::default()
     };
 
-    let mut task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(Arc::new(Mutex::new(
-        kronos::establish_connection(),
-    ))));
+    let mut task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(
+        Arc::new(Mutex::new(kronos::establish_connection())),
+        Arc::new(RwLock::new(LatestTaskManager::new())),
+    ));
 
     eframe::run_simple_native("Task Prompt", native_options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {

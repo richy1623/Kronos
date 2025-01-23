@@ -1,10 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(rustdoc::missing_crate_level_docs)]
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 // it's an example
 use eframe::egui;
-use kronos::{task_prompt::TaskPrompt, widget::task_prompt_widget::TaskPromptWidget};
+use kronos::{
+    model::latest_task::LatestTaskManager, task_prompt::TaskPrompt,
+    widget::task_prompt_widget::TaskPromptWidget,
+};
 
 fn main() {
     let native_options = eframe::NativeOptions {
@@ -14,9 +17,10 @@ fn main() {
         ..Default::default()
     };
 
-    let task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(Arc::new(Mutex::new(
-        kronos::establish_connection(),
-    ))));
+    let task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(
+        Arc::new(Mutex::new(kronos::establish_connection())),
+        Arc::new(RwLock::new(LatestTaskManager::new())),
+    ));
     eframe::run_native(
         "My egui App",
         native_options,

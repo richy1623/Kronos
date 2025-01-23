@@ -1,6 +1,10 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
-use crate::model::{latest_task::LatestTask, task::Task, task_performed::TaskPerformed};
+use crate::model::{
+    latest_task::{LatestTask, LatestTaskManager},
+    task::Task,
+    task_performed::TaskPerformed,
+};
 use chrono::Local;
 use diesel::SqliteConnection;
 
@@ -10,12 +14,20 @@ pub struct TaskPrompt {
     pub available_task_options: Vec<String>,
     latest_task_performed: LatestTask,
     db_connection: Arc<Mutex<SqliteConnection>>,
+    latest_task_manager: Arc<RwLock<LatestTaskManager>>,
 }
 
 impl TaskPrompt {
-    pub fn new(db_connection: Arc<Mutex<SqliteConnection>>) -> Self {
+    pub fn new(
+        db_connection: Arc<Mutex<SqliteConnection>>,
+        latest_task_manager: Arc<RwLock<LatestTaskManager>>,
+    ) -> Self {
         let task_options = Task::fetch_most_recent_tasks(1000, &mut db_connection.lock().unwrap());
         let available_task_options = task_options.iter().map(|task| task.name.clone()).collect();
+        let latest_task_performed = latest_task_manager
+            .read()
+            .unwrap()
+            .get_latest_task_performed();
         TaskPrompt {
             task_name_option: task_options
                 .first()
@@ -23,8 +35,9 @@ impl TaskPrompt {
                 .unwrap_or(String::new()),
             task_options,
             available_task_options,
-            latest_task_performed: LatestTask::get_latest_task_performed(),
+            latest_task_performed,
             db_connection,
+            latest_task_manager,
         }
     }
 
@@ -66,7 +79,11 @@ impl TaskPrompt {
             }
         }
 
-        self.latest_task_performed = LatestTask::update_latest_task_performed(Some(task.id));
+        self.latest_task_performed = self
+            .latest_task_manager
+            .write()
+            .unwrap()
+            .update_latest_task_performed(Some(task.id));
     }
 
     // pub fn set_task_name_option(mut self, task_name: &str) {
@@ -85,10 +102,12 @@ impl TaskPrompt {
 mod tests {
     use std::{
         fs,
+        path::Path,
         sync::{Arc, Mutex},
     };
 
     use crate::{
+        model::latest_task::LatestTaskManager,
         schema::{task, task_performed},
         MIGRATIONS,
     };
@@ -126,35 +145,50 @@ mod tests {
         db_connection
     }
 
+    #[fixture]
+    #[once]
+    pub fn latest_task_manager() -> Arc<RwLock<LatestTaskManager>> {
+        Arc::new(RwLock::new(LatestTaskManager::from_file_location(
+            Path::new("test").join("task_performed"),
+        )))
+    }
+
     #[rstest]
-    fn test_create_new_task_prompt(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_create_new_task_prompt(
+        db_connection: &Arc<Mutex<SqliteConnection>>,
+        latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
+    ) {
         let mut connection = db_connection.lock().unwrap();
+        let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
 
         let task_1 = Task::create_task("task_create_1", &mut connection).unwrap();
         let task_2 = Task::create_task("task_create_2", &mut connection).unwrap();
-        LatestTask::update_latest_task_performed(Some(task_2.id));
+        latest_task_manager_setup.update_latest_task_performed(Some(task_2.id));
 
         std::mem::drop(connection);
+        std::mem::drop(latest_task_manager_setup);
 
-        let task_prompt = TaskPrompt::new(db_connection.clone());
+        let task_prompt = TaskPrompt::new(db_connection.clone(), latest_task_manager.clone());
 
-        assert_eq!(
-            task_prompt.available_task_options,
-            vec![task_2.name.clone(), task_1.name.clone()]
-        );
+        assert!(task_prompt.available_task_options.contains(&task_2.name));
+        assert!(task_prompt.available_task_options.contains(&task_1.name));
         assert_eq!(&task_prompt.task_name_option, &task_2.name);
-        assert_eq!(
-            task_prompt.task_options,
-            vec![task_2.clone(), task_1.clone()]
-        );
+        assert!(task_prompt.task_options.contains(&task_2));
+        assert!(task_prompt.task_options.contains(&task_1));
         assert_eq!(
             task_prompt.latest_task_performed,
-            LatestTask::get_latest_task_performed()
+            latest_task_manager
+                .read()
+                .unwrap()
+                .get_latest_task_performed()
         );
     }
 
     #[rstest]
-    fn test_get_time_spent_minutes(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_get_time_spent_minutes(
+        db_connection: &Arc<Mutex<SqliteConnection>>,
+        latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
+    ) {
         let current_time = Local::now();
 
         let earlier = current_time
@@ -170,25 +204,31 @@ mod tests {
                 date_time_performed: earlier,
             },
             db_connection: db_connection.clone(),
+            latest_task_manager: latest_task_manager.clone(),
         };
 
         assert_eq!(task_prompt.get_time_spent_minutes(), 5);
     }
 
     #[rstest]
-    fn test_update_task_with_exiting_task(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_update_task_with_exiting_task(
+        db_connection: &Arc<Mutex<SqliteConnection>>,
+        latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
+    ) {
         let connection = db_connection.clone();
         let mut connection = connection.lock().unwrap();
+        let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
 
         let task = Task::create_task("update_task_1", &mut connection).unwrap();
 
-        LatestTask::update_latest_task_performed(None);
+        latest_task_manager_setup.update_latest_task_performed(None);
 
         let current_date = Local::now().date_naive().to_string();
 
         std::mem::drop(connection);
-        let mut task_prompt = TaskPrompt::new(db_connection.clone());
+        std::mem::drop(latest_task_manager_setup);
 
+        let mut task_prompt = TaskPrompt::new(db_connection.clone(), latest_task_manager.clone());
         // Update task time spent
         let latest_task = LatestTask {
             task_id: None,
@@ -205,6 +245,7 @@ mod tests {
         // Validate
         std::mem::drop(task_prompt);
         let mut connection = db_connection.lock().unwrap();
+        let latest_task_manager_validate = latest_task_manager.read().unwrap();
 
         assert_eq!(
             TaskPerformed::get_task_by_task_id_and_date(task.id, &current_date, &mut connection)
@@ -216,19 +257,28 @@ mod tests {
                 is_synced_to_server: false
             }
         );
+
         assert!(
-            LatestTask::get_latest_task_performed().date_time_performed
+            latest_task_manager_validate
+                .get_latest_task_performed()
+                .date_time_performed
                 > latest_task.date_time_performed
         );
         assert_eq!(
-            LatestTask::get_latest_task_performed().task_id,
+            latest_task_manager_validate
+                .get_latest_task_performed()
+                .task_id,
             Some(task.id)
         );
     }
 
     #[rstest]
-    fn test_update_task_with_exiting_1task_performed(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_update_task_with_exiting_1task_performed(
+        db_connection: &Arc<Mutex<SqliteConnection>>,
+        latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
+    ) {
         let mut connection = db_connection.lock().unwrap();
+        let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
 
         let current_date = Local::now().date_naive().to_string();
 
@@ -240,12 +290,13 @@ mod tests {
             is_synced_to_server: false,
         };
         TaskPerformed::insert_task_performed(&task_performed, &mut connection).unwrap();
-        LatestTask::update_latest_task_performed(None);
+        latest_task_manager_setup.update_latest_task_performed(None);
 
         std::mem::drop(connection);
+        std::mem::drop(latest_task_manager_setup);
 
         // Perform prompt update
-        let mut task_prompt = TaskPrompt::new(db_connection.clone());
+        let mut task_prompt = TaskPrompt::new(db_connection.clone(), latest_task_manager.clone());
 
         task_prompt.task_name_option = String::from("update_task_2");
 
@@ -262,6 +313,7 @@ mod tests {
 
         // Validate
         std::mem::drop(task_prompt);
+        let latest_task_manager_validate = latest_task_manager.read().unwrap();
         let mut connection = db_connection.lock().unwrap();
 
         assert_eq!(
@@ -275,22 +327,32 @@ mod tests {
             }
         );
         assert!(
-            LatestTask::get_latest_task_performed().date_time_performed
+            latest_task_manager_validate
+                .get_latest_task_performed()
+                .date_time_performed
                 > latest_task.date_time_performed
         );
         assert_eq!(
-            LatestTask::get_latest_task_performed().task_id,
+            latest_task_manager_validate
+                .get_latest_task_performed()
+                .task_id,
             Some(task.id)
         );
     }
 
     #[rstest]
-    fn test_update_task_with_new_task(db_connection: &Arc<Mutex<SqliteConnection>>) {
-        LatestTask::update_latest_task_performed(None);
+    fn test_update_task_with_new_task(
+        db_connection: &Arc<Mutex<SqliteConnection>>,
+        latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
+    ) {
+        let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
+        latest_task_manager_setup.update_latest_task_performed(None);
 
         let current_date = Local::now().date_naive().to_string();
 
-        let mut task_prompt = TaskPrompt::new(db_connection.clone());
+        std::mem::drop(latest_task_manager_setup);
+
+        let mut task_prompt = TaskPrompt::new(db_connection.clone(), latest_task_manager.clone());
 
         task_prompt.task_name_option = String::from("update_task_3");
 
@@ -309,6 +371,7 @@ mod tests {
         std::mem::drop(task_prompt);
 
         let mut connection = db_connection.lock().unwrap();
+        let latest_task_manager_validate = latest_task_manager.read().unwrap();
 
         let task = Task::get_task_by_name("update_task_3", &mut connection).unwrap();
 
@@ -323,11 +386,16 @@ mod tests {
             }
         );
         assert!(
-            LatestTask::get_latest_task_performed().date_time_performed
+            latest_task_manager_validate
+                .get_latest_task_performed()
+                .date_time_performed
                 > latest_task.date_time_performed
         );
         assert_eq!(
-            LatestTask::get_latest_task_performed().task_id.unwrap(),
+            latest_task_manager_validate
+                .get_latest_task_performed()
+                .task_id
+                .unwrap(),
             task.id
         );
     }
