@@ -176,73 +176,127 @@ mod tests {
     }
 
     #[rstest]
-    fn test_update_task(db_connection: &Arc<Mutex<SqliteConnection>>) {
-        let mut connection = SqliteConnection::establish(&DATABASE_URL)
-            .unwrap_or_else(|_| panic!("Error connecting to {}", DATABASE_URL));
+    fn test_update_task_with_exiting_task(db_connection: &Arc<Mutex<SqliteConnection>>) {
+        let connection = db_connection.clone();
+        let mut connection = connection.lock().unwrap();
 
-        let task_1 = Task::create_task("update_task_1", &mut connection).unwrap();
+        let task = Task::create_task("update_task_1", &mut connection).unwrap();
+
+        LatestTask::update_latest_task_performed(None);
+
+        let current_date = Local::now().date_naive().to_string();
+
+        std::mem::drop(connection);
+        let mut task_prompt = TaskPrompt::new(db_connection.clone());
+
+        // Update task time spent
+        let latest_task = LatestTask {
+            task_id: None,
+            date_time_performed: Local::now()
+                .checked_sub_signed(TimeDelta::minutes(5))
+                .unwrap(),
+        };
+        task_prompt.latest_task_performed = latest_task.clone();
+        // Update to an existing task
+        task_prompt.task_name_option = String::from("update_task_1");
+
+        task_prompt.update_task();
+
+        // Validate
+        std::mem::drop(task_prompt);
+        let mut connection = db_connection.lock().unwrap();
+
+        assert_eq!(
+            TaskPerformed::get_task_by_task_id_and_date(task.id, &current_date, &mut connection)
+                .unwrap(),
+            TaskPerformed {
+                date: current_date.clone(),
+                task_id: task.id,
+                time_spent: 5,
+                is_synced_to_server: false
+            }
+        );
+        assert!(
+            LatestTask::get_latest_task_performed().date_time_performed
+                > latest_task.date_time_performed
+        );
+        assert_eq!(
+            LatestTask::get_latest_task_performed().task_id,
+            Some(task.id)
+        );
+    }
+
+    #[rstest]
+    fn test_update_task_with_exiting_1task_performed(db_connection: &Arc<Mutex<SqliteConnection>>) {
+        let mut connection = db_connection.lock().unwrap();
+
+        let current_date = Local::now().date_naive().to_string();
+
+        let task = Task::create_task("update_task_2", &mut connection).unwrap();
+        let task_performed = TaskPerformed {
+            date: current_date.clone(),
+            task_id: task.id,
+            time_spent: 5,
+            is_synced_to_server: false,
+        };
+        TaskPerformed::insert_task_performed(&task_performed, &mut connection).unwrap();
+        LatestTask::update_latest_task_performed(None);
+
+        std::mem::drop(connection);
+
+        // Perform prompt update
+        let mut task_prompt = TaskPrompt::new(db_connection.clone());
+
+        task_prompt.task_name_option = String::from("update_task_2");
+
+        // Update task time spent
+        let latest_task = LatestTask {
+            task_id: None,
+            date_time_performed: Local::now()
+                .checked_sub_signed(TimeDelta::minutes(5))
+                .unwrap(),
+        };
+        task_prompt.latest_task_performed = latest_task.clone();
+        // Update to an existing task
+        task_prompt.update_task();
+
+        // Validate
+        std::mem::drop(task_prompt);
+        let mut connection = db_connection.lock().unwrap();
+
+        assert_eq!(
+            TaskPerformed::get_task_by_task_id_and_date(task.id, &current_date, &mut connection)
+                .unwrap(),
+            TaskPerformed {
+                date: current_date.clone(),
+                task_id: task.id,
+                time_spent: 10,
+                is_synced_to_server: false
+            }
+        );
+        assert!(
+            LatestTask::get_latest_task_performed().date_time_performed
+                > latest_task.date_time_performed
+        );
+        assert_eq!(
+            LatestTask::get_latest_task_performed().task_id,
+            Some(task.id)
+        );
+    }
+
+    #[rstest]
+    fn test_update_task_with_new_task(db_connection: &Arc<Mutex<SqliteConnection>>) {
         LatestTask::update_latest_task_performed(None);
 
         let current_date = Local::now().date_naive().to_string();
 
         let mut task_prompt = TaskPrompt::new(db_connection.clone());
 
-        task_prompt.task_name_option = String::from("update_task_1");
-
-        // Update to an existing task
-        task_prompt.update_task();
-
-        assert_eq!(
-            Task::get_task_by_id(task_1.id, &mut connection).unwrap(),
-            task_1
-        );
-        assert_eq!(
-            TaskPerformed::get_task_by_task_id_and_date(task_1.id, &current_date, &mut connection)
-                .unwrap(),
-            TaskPerformed {
-                date: current_date.clone(),
-                task_id: task_1.id,
-                time_spent: 0,
-                is_synced_to_server: false
-            }
-        );
-        assert_eq!(
-            LatestTask::get_latest_task_performed().task_id,
-            Some(task_1.id)
-        );
-
-        // Update to a new task
-        let latest_task = LatestTask {
-            task_id: Some(task_1.id),
-            date_time_performed: Local::now()
-                .checked_sub_signed(TimeDelta::minutes(1))
-                .unwrap(),
-        };
-        task_prompt.latest_task_performed = latest_task.clone();
-        task_prompt.task_name_option = String::from("update_task_2");
-
-        task_prompt.update_task();
-
-        let task_2 = Task::get_task_by_name("update_task_2", &mut connection).unwrap();
-
-        assert_eq!(
-            TaskPerformed::get_task_by_task_id_and_date(task_2.id, &current_date, &mut connection)
-                .unwrap(),
-            TaskPerformed {
-                date: current_date.clone(),
-                task_id: task_2.id,
-                time_spent: 1,
-                is_synced_to_server: false
-            }
-        );
-        assert_eq!(
-            LatestTask::get_latest_task_performed().task_id,
-            Some(task_2.id)
-        );
+        task_prompt.task_name_option = String::from("update_task_3");
 
         // Update task time spent
         let latest_task = LatestTask {
-            task_id: Some(task_2.id),
+            task_id: None,
             date_time_performed: Local::now()
                 .checked_sub_signed(TimeDelta::minutes(5))
                 .unwrap(),
@@ -251,19 +305,30 @@ mod tests {
 
         task_prompt.update_task();
 
+        // Validate
+        std::mem::drop(task_prompt);
+
+        let mut connection = db_connection.lock().unwrap();
+
+        let task = Task::get_task_by_name("update_task_3", &mut connection).unwrap();
+
         assert_eq!(
-            TaskPerformed::get_task_by_task_id_and_date(task_2.id, &current_date, &mut connection)
+            TaskPerformed::get_task_by_task_id_and_date(task.id, &current_date, &mut connection)
                 .unwrap(),
             TaskPerformed {
                 date: current_date.clone(),
-                task_id: task_2.id,
-                time_spent: 6, // Additive for the same task
+                task_id: task.id,
+                time_spent: 5,
                 is_synced_to_server: false
             }
         );
         assert!(
             LatestTask::get_latest_task_performed().date_time_performed
                 > latest_task.date_time_performed
+        );
+        assert_eq!(
+            LatestTask::get_latest_task_performed().task_id.unwrap(),
+            task.id
         );
     }
 }
