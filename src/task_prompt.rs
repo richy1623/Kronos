@@ -113,10 +113,11 @@ mod tests {
     };
 
     use super::*;
-    use chrono::TimeDelta;
-    use diesel::{Connection, RunQueryDsl};
+    use chrono::{Days, TimeDelta};
+    use diesel::{Connection, ExpressionMethods, RunQueryDsl, SelectableHelper};
     use diesel_migrations::MigrationHarness;
     use rstest::*;
+    use serial_test::serial;
 
     const DATABASE_URL: &str = "test/task_prompt_test_database.db";
 
@@ -154,6 +155,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn test_create_new_task_prompt(
         db_connection: &Arc<Mutex<SqliteConnection>>,
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
@@ -161,8 +163,22 @@ mod tests {
         let mut connection = db_connection.lock().unwrap();
         let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
 
-        let task_1 = Task::create_task("task_create_1", &mut connection).unwrap();
-        let task_2 = Task::create_task("task_create_2", &mut connection).unwrap();
+        let task_1 = Task::create_task("task_prompt_create_1", &mut connection).unwrap();
+        let task_2 = diesel::insert_into(task::table)
+            .values((
+                task::name.eq("task_prompt_create_2"),
+                task::last_used.eq::<i32>(
+                    Local::now()
+                        .checked_add_days(Days::new(1))
+                        .unwrap()
+                        .timestamp()
+                        .try_into()
+                        .unwrap(),
+                ),
+            ))
+            .returning(Task::as_returning())
+            .get_result(&mut *connection)
+            .unwrap();
         latest_task_manager_setup.update_latest_task_performed(Some(task_2.id));
 
         std::mem::drop(connection);
@@ -185,6 +201,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn test_get_time_spent_minutes(
         db_connection: &Arc<Mutex<SqliteConnection>>,
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
@@ -211,6 +228,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn test_update_task_with_exiting_task(
         db_connection: &Arc<Mutex<SqliteConnection>>,
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
@@ -273,6 +291,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn test_update_task_with_exiting_task_no_task_performed(
         db_connection: &Arc<Mutex<SqliteConnection>>,
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
@@ -341,6 +360,7 @@ mod tests {
     }
 
     #[rstest]
+    #[serial]
     fn test_update_task_with_new_task(
         db_connection: &Arc<Mutex<SqliteConnection>>,
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
