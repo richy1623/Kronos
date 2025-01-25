@@ -149,7 +149,7 @@ mod tests {
     #[once]
     pub fn latest_task_manager() -> Arc<RwLock<LatestTaskManager>> {
         Arc::new(RwLock::new(LatestTaskManager::from_file_location(
-            Path::new("test").join("task_performed"),
+            Path::new("test").join("task_prompt"),
         )))
     }
 
@@ -273,7 +273,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_update_task_with_exiting_1task_performed(
+    fn test_update_task_with_exiting_task_no_task_performed(
         db_connection: &Arc<Mutex<SqliteConnection>>,
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
     ) {
