@@ -17,7 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: cache-test-restore
         with:
           path: |
             ~/.cargo/bin/
@@ -32,6 +33,20 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
+      - uses: actions/cache/save@v4
+        id: cache-test-save
+        if: (success() || failure()) && steps.cache-coverage-restore.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
   coverage:
     name: Run Coverage Tests
     runs-on: ubuntu-latest
@@ -41,7 +56,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: cache-coverage-restore
         with:
           path: |
             ~/.cargo/bin/
@@ -66,6 +82,20 @@ jobs:
         run:
           cargo tarpaulin --no-fail-fast --target-dir "target/tarpaulin" --exclude-files "target/*" --skip-clean --out
           xml
+
+      - uses: actions/cache/save@v4
+        id: cache-coverage-save
+        if: (success() || failure()) && steps.cache-coverage-restore.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
