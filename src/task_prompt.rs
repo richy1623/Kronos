@@ -72,7 +72,6 @@ impl TaskPrompt {
                     date: current_date,
                     task_id: task.id,
                     time_spent: time_spent_minutes,
-                    is_synced_to_server: false,
                 };
                 TaskPerformed::insert_task_performed(&task_performed, &mut connection)
                     .expect("Update Failed");
@@ -272,7 +271,6 @@ mod tests {
                 date: current_date.clone(),
                 task_id: task.id,
                 time_spent: 5,
-                is_synced_to_server: false
             }
         );
 
@@ -306,7 +304,6 @@ mod tests {
             date: current_date.clone(),
             task_id: task.id,
             time_spent: 5,
-            is_synced_to_server: false,
         };
         TaskPerformed::insert_task_performed(&task_performed, &mut connection).unwrap();
         latest_task_manager_setup.update_latest_task_performed(None);
@@ -342,7 +339,6 @@ mod tests {
                 date: current_date.clone(),
                 task_id: task.id,
                 time_spent: 10,
-                is_synced_to_server: false
             }
         );
         assert!(
@@ -402,7 +398,6 @@ mod tests {
                 date: current_date.clone(),
                 task_id: task.id,
                 time_spent: 5,
-                is_synced_to_server: false
             }
         );
         assert!(

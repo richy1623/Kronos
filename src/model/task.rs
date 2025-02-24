@@ -8,8 +8,7 @@ use regex::Regex;
 pub struct Task {
     pub id: i32,
     pub name: String,
-    pub last_used: i32,
-    pub is_synced_to_server: bool
+    pub last_used: i32
 }
 
 impl Task {
@@ -386,7 +385,6 @@ mod tests {
                 date: String::from("1999-09-05"),
                 task_id: task_to_save.id,
                 time_spent: 21,
-                is_synced_to_server: false
             },
             &mut connection,
         )
@@ -410,7 +408,7 @@ mod tests {
     #[rstest]
     #[case("cat", vec![
         "Complete the cat report",
-        "Buy a caterpillar plushie",
+        "Buy a caterpillar doll",
         "Catalog new books"
     ])]
     #[case("fix", vec!["Fix the faucet"])]
@@ -423,7 +421,7 @@ mod tests {
     ) {
         let tasks = vec![
             String::from("Complete the cat report"),
-            String::from("Buy a caterpillar plushie"),
+            String::from("Buy a caterpillar doll"),
             String::from("Catalog new books"),
             String::from("Take out the trash"),
             String::from("Fix the faucet"),

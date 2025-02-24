@@ -22,7 +22,7 @@ impl TaskSelectWidget {
             task_options,
             available_task_options,
             input_text: initial_task_name,
-            widget_id: Id::new(rand::thread_rng().gen::<u64>()),
+            widget_id: Id::new(rand::rng().random::<u64>()),
             did_select_option: false,
             did_click_option: false,
             desired_width: None,

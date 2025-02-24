@@ -12,3 +12,7 @@ test/
 
 # Coverage Report
 tarpaulin-report.html
+
+
+# VSCode
+.vscode
