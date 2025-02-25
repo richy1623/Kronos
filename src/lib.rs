@@ -1,5 +1,6 @@
 pub mod model;
 pub mod schema;
+pub mod settings;
 pub mod task_list;
 pub mod task_prompt;
 pub mod task_prompt_manager;
