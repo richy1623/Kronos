@@ -107,6 +107,7 @@ impl LatestTaskManager {
     }
 }
 
+// TODO make tests use temp dirs
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -18,72 +18,72 @@ pub const APPLICATION_STORAGE_PATH: Lazy<PathBuf> = Lazy::new(|| {
     application_storage_path
 });
 
-pub const USER_DATA_STORAGE_PATH: Lazy<PathBuf> = Lazy::new(|| {
-    let mut user_data_storage_path = APPLICATION_STORAGE_PATH.clone();
-    user_data_storage_path.push(DATA_DIRECTORY_NAME);
-    user_data_storage_path
-});
-pub const USER_DATA_DATABASE_FILE_PATH: Lazy<PathBuf> = Lazy::new(|| {
-    let mut user_data_file_path = USER_DATA_STORAGE_PATH.clone();
-    user_data_file_path.push(DATABASE_FILE_NAME);
-    user_data_file_path
-});
-
-pub const USER_SETTINGS_STORAGE_PATH: Lazy<PathBuf> = Lazy::new(|| {
-    let mut user_settings_storage_path = APPLICATION_STORAGE_PATH.clone();
-    user_settings_storage_path.push(SETTINGS_DIRECTORY_NAME);
-    user_settings_storage_path
-});
-
-pub const USER_SETTINGS_FILE_PATH: Lazy<PathBuf> = Lazy::new(|| {
-    let mut user_settings_file_path = USER_SETTINGS_STORAGE_PATH.clone();
-    user_settings_file_path.push(SETTINGS_FILE_NAME);
-    user_settings_file_path
-});
-
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Settings {
     task_prompt_delay: Duration,
+    data_storage_path: PathBuf,
+    database_file_path: PathBuf,
+    user_settings_file_path: PathBuf,
 }
 
 impl Settings {
-    pub fn new() -> Self {
-        if fs::metadata(&APPLICATION_STORAGE_PATH.as_path()).is_err() {
+    fn from_dir(application_storage_path: PathBuf) -> Self {
+        log::trace!(
+            "Creating Settings object with application_storage_path '{}'.",
+            application_storage_path
+                .to_str()
+                .unwrap_or("<unable to print path>")
+        );
+        // Set file locations
+        let user_settings_directory = application_storage_path
+            .clone()
+            .join(SETTINGS_DIRECTORY_NAME);
+        let user_settings_file_path = application_storage_path
+            .clone()
+            .join(SETTINGS_DIRECTORY_NAME)
+            .join(SETTINGS_FILE_NAME);
+        let data_storage_path = application_storage_path.clone().join(DATA_DIRECTORY_NAME);
+        let database_file_path = application_storage_path
+            .clone()
+            .join(DATA_DIRECTORY_NAME)
+            .join(DATABASE_FILE_NAME);
+        // Create directories if needed
+        if fs::metadata(&application_storage_path.as_path()).is_err() {
             log::info!(
                 "APPLICATION_STORAGE_PATH directory does not exist. Creating directory '{}'.",
-                APPLICATION_STORAGE_PATH
+                application_storage_path
                     .to_str()
                     .unwrap_or("<unable to print path>")
             );
-            std::fs::create_dir(APPLICATION_STORAGE_PATH.as_path()).expect(&format!(
+            std::fs::create_dir(application_storage_path.as_path()).expect(&format!(
                 "Failed to create application save directory '{}'",
                 APPLICATION_STORAGE_PATH
                     .to_str()
                     .unwrap_or("<unable to print path>")
             ));
         }
-        if fs::metadata(&USER_SETTINGS_STORAGE_PATH.as_path()).is_err() {
+        if fs::metadata(&user_settings_directory.as_path()).is_err() {
             log::info!(
-                "USER_SETTINGS_STORAGE_PATH directory does not exist. Creating directory '{}'.",
-                USER_SETTINGS_STORAGE_PATH
+                "user_settings_directory directory does not exist. Creating directory '{}'.",
+                user_settings_directory
                     .to_str()
                     .unwrap_or("<unable to print path>")
             );
-            std::fs::create_dir(USER_SETTINGS_STORAGE_PATH.as_path()).expect(&format!(
+            std::fs::create_dir(user_settings_directory.as_path()).expect(&format!(
                 "Failed to create user settings save directory '{}'",
-                APPLICATION_STORAGE_PATH
+                user_settings_directory
                     .to_str()
                     .unwrap_or("<unable to print path>")
             ));
         }
-        if fs::metadata(&USER_DATA_STORAGE_PATH.as_path()).is_err() {
+        if fs::metadata(&data_storage_path.as_path()).is_err() {
             log::info!(
-                "USER_DATA_STORAGE_PATH directory does not exist. Creating directory '{}'.",
-                USER_DATA_STORAGE_PATH
+                "data_storage_path directory does not exist. Creating directory '{}'.",
+                data_storage_path
                     .to_str()
                     .unwrap_or("<unable to print path>")
             );
-            std::fs::create_dir(USER_DATA_STORAGE_PATH.as_path()).expect(&format!(
+            std::fs::create_dir(data_storage_path.as_path()).expect(&format!(
                 "Failed to create user data save directory '{}'",
                 APPLICATION_STORAGE_PATH
                     .to_str()
@@ -91,17 +91,22 @@ impl Settings {
             ));
         }
 
-        if USER_SETTINGS_FILE_PATH.as_path().exists() {
+        if user_settings_file_path.as_path().exists() {
             log::debug!(
-                "USER_SETTINGS_FILE_PATH file exists. Loading settings from file '{}'.",
-                USER_SETTINGS_FILE_PATH
+                "user_settings_file_path file exists. Loading settings from file '{}'.",
+                user_settings_file_path
                     .to_str()
                     .unwrap_or("<unable to print path>")
             );
-            if let Ok(settings_file_data) = fs::read_to_string(&USER_SETTINGS_FILE_PATH.as_path()) {
+            if let Ok(settings_file_data) = fs::read_to_string(&user_settings_file_path.as_path()) {
                 match serde_json::from_str::<Self>(&settings_file_data) {
                     Ok(settings) => {
-                        return settings;
+                        return Settings {
+                            data_storage_path,
+                            database_file_path,
+                            user_settings_file_path,
+                            ..settings
+                        };
                     }
                     Err(e) => {
                         log::error!("User settings file cannot be read. {}", e);
@@ -115,8 +120,14 @@ impl Settings {
         );
         Settings {
             task_prompt_delay: Duration::from_secs(DEFAULT_TASK_PROMPT_DELAY_SECONDS),
-            // task_prompt_delay_seconds: DEFAULT_TASK_PROMPT_DELAY_SECONDS,
+            data_storage_path,
+            database_file_path,
+            user_settings_file_path,
         }
+    }
+
+    pub fn new() -> Self {
+        Settings::from_dir(APPLICATION_STORAGE_PATH.clone())
     }
 
     pub fn get_task_prompt_delay(&self) -> Duration {
@@ -130,47 +141,90 @@ impl Settings {
 
     fn save_settings_to_file(&self) {
         fs::write(
-            USER_SETTINGS_FILE_PATH.as_path(),
+            self.user_settings_file_path.as_path(),
             serde_json::to_string(&self).expect("Failed to serialize"),
         )
         .expect(&format!(
             "Failed to save file: \"{}\"",
-            USER_SETTINGS_FILE_PATH
+            self.user_settings_file_path
                 .to_str()
                 .unwrap_or("<unable to print path>")
         ));
+    }
+
+    pub fn data_storage_path(&self) -> &PathBuf {
+        &self.data_storage_path
+    }
+
+    pub fn database_file_path(&self) -> &PathBuf {
+        &self.database_file_path
+    }
+
+    pub fn user_settings_file_path(&self) -> &PathBuf {
+        &self.user_settings_file_path
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use tempfile::TempDir;
+
     use super::*;
 
     #[test]
-    fn testsettings_create_settings() {
-        env_logger::init();
-        let settings = Settings::new();
+    fn test_create_settings() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let settings = Settings::from_dir(temp_dir.path().to_path_buf());
+
         assert_eq!(
             settings.get_task_prompt_delay(),
             Duration::from_secs(DEFAULT_TASK_PROMPT_DELAY_SECONDS)
         );
+        assert!(temp_dir.path().join(DATA_DIRECTORY_NAME).exists());
+        assert!(temp_dir.path().join(SETTINGS_DIRECTORY_NAME).exists());
     }
 
     #[test]
-    fn testsettings_update_task_prompt_delay() {
-        let mut settings = Settings::new();
-        let new_delay = Duration::from_secs(30 * 60); // 30 minutes
+    fn test_update_settings_and_save() {
+        let temp_dir = TempDir::new().unwrap();
 
-        settings.update_task_prompt_delay(new_delay);
+        let new_task_delay = Duration::from_secs(5);
 
-        assert_eq!(settings.get_task_prompt_delay(), new_delay);
+        {
+            let mut settings = Settings::from_dir(temp_dir.path().to_path_buf());
+
+            assert_eq!(
+                settings.get_task_prompt_delay(),
+                Duration::from_secs(DEFAULT_TASK_PROMPT_DELAY_SECONDS)
+            );
+
+            settings.update_task_prompt_delay(new_task_delay);
+
+            assert_eq!(settings.task_prompt_delay, new_task_delay);
+        }
+
+        let settings = Settings::from_dir(temp_dir.path().to_path_buf());
+        assert_eq!(settings.task_prompt_delay, new_task_delay);
     }
 
     #[test]
-    fn testsettings_read_settings_from_file() {
-        env_logger::init();
-        let settings = Settings::new();
-        assert_eq!(settings.get_task_prompt_delay(), Duration::from_secs(1800));
-        // 30 minutes
+    fn test_read_settings_from_file() {
+        let temp_dir = TempDir::new().unwrap();
+        std::fs::create_dir(temp_dir.path().join(SETTINGS_DIRECTORY_NAME)).unwrap();
+        fs::copy(
+            PathBuf::from("test_res")
+                .join("test_read_settings.json")
+                .as_path(),
+            temp_dir
+                .path()
+                .join(SETTINGS_DIRECTORY_NAME)
+                .join(SETTINGS_FILE_NAME),
+        )
+        .unwrap();
+
+        let settings = Settings::from_dir(temp_dir.path().to_path_buf());
+
+        assert_eq!(settings.get_task_prompt_delay(), Duration::from_secs(1));
     }
 }

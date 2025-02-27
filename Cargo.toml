@@ -9,7 +9,7 @@ diesel = { version = "2.2.7", features = ["sqlite", "returning_clauses_for_sqlit
 diesel_migrations = "2.2.0"
 libsqlite3-sys = { version = "0.31.0", features = ["bundled"] }
 dotenvy = "0.15.7"
-chrono = { version = "0.4.39", features = ["serde"]}
+chrono = { version = "0.4.40", features = ["serde"]}
 regex = "1.11.1"
 egui = "0.31.0"
 eframe = "0.31.0"
