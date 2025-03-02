@@ -1,8 +1,10 @@
 use std::sync::{Arc, Mutex, RwLock};
 
 use chrono::Local;
+use diesel::SqliteConnection;
 use kronos::{
     model::latest_task::LatestTaskManager,
+    settings::Settings,
     task_list::TaskList,
     task_prompt::TaskPrompt,
     task_prompt_manager::{self, TaskPromptManager, TaskPromptManagerState},
@@ -13,11 +15,27 @@ use kronos::{
 async fn main() {
     env_logger::init();
 
-    let mut task_prompt_manager = TaskPromptManager::new();
+    let settings = Arc::new(Mutex::new(Settings::new()));
+
+    let database_connection = {
+        Arc::new(Mutex::new(kronos::establish_connection(
+            settings
+                .lock()
+                .unwrap()
+                .get_database_file_path()
+                .to_str()
+                .expect("Failed to read database file path"),
+        )))
+    };
+
+    let mut task_prompt_manager = TaskPromptManager::new(settings.clone());
 
     task_prompt_manager.start();
+    let con = database_connection.clone();
+    let con2 = database_connection.clone();
 
     let mut task_prompt_manager_rx = task_prompt_manager.subscribe();
+    let settings_handle = settings.clone();
     while let Ok(cmd) = task_prompt_manager_rx.recv().await {
         match cmd {
             task_prompt_manager::TaskPromptManagerState::UiOpen => (),
@@ -28,16 +46,20 @@ async fn main() {
                     .send(TaskPromptManagerState::UiOpen)
                     .await
                     .unwrap();
-                spawn_task_prompt();
+                spawn_task_prompt(con.clone(), settings_handle.clone());
                 // spawn_fake_window();
-                spawn_task_list(false, &mut task_prompt_manager);
+                spawn_task_list(false, &mut task_prompt_manager, con2.clone());
             }
             task_prompt_manager::TaskPromptManagerState::Stopped => break,
         }
     }
 }
 
-fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) {
+fn spawn_task_list(
+    spawn_active: bool,
+    task_prompt_manager: &TaskPromptManager,
+    database_connection: Arc<Mutex<SqliteConnection>>,
+) {
     let mut task_prompt_manager_rx = task_prompt_manager.subscribe();
 
     let native_options = eframe::NativeOptions {
@@ -49,7 +71,7 @@ fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) 
     };
 
     let mut task_list_widget = TaskListWidget::new(TaskList::new(
-        Arc::new(Mutex::new(kronos::establish_connection())),
+        database_connection,
         Local::now().date_naive(),
     ));
 
@@ -116,7 +138,10 @@ fn spawn_task_list(spawn_active: bool, task_prompt_manager: &TaskPromptManager) 
     }
 }
 
-fn spawn_task_prompt() {
+fn spawn_task_prompt(
+    database_connection: Arc<Mutex<SqliteConnection>>,
+    settings: Arc<Mutex<Settings>>,
+) {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_always_on_top()
@@ -125,8 +150,8 @@ fn spawn_task_prompt() {
     };
 
     let mut task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(
-        Arc::new(Mutex::new(kronos::establish_connection())),
-        Arc::new(RwLock::new(LatestTaskManager::new())),
+        database_connection,
+        Arc::new(RwLock::new(LatestTaskManager::new(settings))),
     ));
 
     eframe::run_simple_native("Task Prompt", native_options, move |ctx, _frame| {

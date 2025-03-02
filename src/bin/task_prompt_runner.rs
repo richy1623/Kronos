@@ -5,11 +5,12 @@ use std::sync::{Arc, Mutex, RwLock};
 // it's an example
 use eframe::egui;
 use kronos::{
-    model::latest_task::LatestTaskManager, task_prompt::TaskPrompt,
+    model::latest_task::LatestTaskManager, settings::Settings, task_prompt::TaskPrompt,
     widget::task_prompt_widget::TaskPromptWidget,
 };
 
 fn main() {
+    let settings = Settings::new();
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_always_on_top()
@@ -18,8 +19,12 @@ fn main() {
     };
 
     let task_prompt_widget = TaskPromptWidget::new(TaskPrompt::new(
-        Arc::new(Mutex::new(kronos::establish_connection())),
-        Arc::new(RwLock::new(LatestTaskManager::new())),
+        Arc::new(Mutex::new(kronos::establish_connection(
+            settings.get_database_file_path().to_str().unwrap(),
+        ))),
+        Arc::new(RwLock::new(LatestTaskManager::new(Arc::new(Mutex::new(
+            settings,
+        ))))),
     ));
     eframe::run_native(
         "My egui App",

@@ -27,7 +27,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    fn from_dir(application_storage_path: PathBuf) -> Self {
+    pub fn from_dir(application_storage_path: PathBuf) -> Self {
         log::trace!(
             "Creating Settings object with application_storage_path '{}'.",
             application_storage_path
@@ -152,15 +152,15 @@ impl Settings {
         ));
     }
 
-    pub fn data_storage_path(&self) -> &PathBuf {
+    pub fn get_data_storage_path(&self) -> &PathBuf {
         &self.data_storage_path
     }
 
-    pub fn database_file_path(&self) -> &PathBuf {
+    pub fn get_database_file_path(&self) -> &PathBuf {
         &self.database_file_path
     }
 
-    pub fn user_settings_file_path(&self) -> &PathBuf {
+    pub fn get_user_settings_file_path(&self) -> &PathBuf {
         &self.user_settings_file_path
     }
 }

@@ -1,10 +1,11 @@
 use std::{
     sync::{Arc, Mutex},
     thread::{self, JoinHandle},
-    time::Duration,
 };
 
 use tokio::{sync::broadcast, sync::mpsc, time::sleep};
+
+use crate::settings::Settings;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TaskPromptManagerState {
@@ -13,7 +14,6 @@ pub enum TaskPromptManagerState {
     AwaitingPrompt,
     Stopped,
 }
-const SLEEP_DURATION_MILLIS: u64 = 3000;
 
 pub struct TaskPromptManager {
     state: Arc<Mutex<TaskPromptManagerState>>,
@@ -21,10 +21,11 @@ pub struct TaskPromptManager {
     rx: Arc<Mutex<mpsc::Receiver<TaskPromptManagerState>>>,
     broadcast_tx: broadcast::Sender<TaskPromptManagerState>,
     task_prompt_manager_join_handle: Option<JoinHandle<()>>,
+    settings: Arc<Mutex<Settings>>,
 }
 
 impl TaskPromptManager {
-    pub fn new() -> Self {
+    pub fn new(settings: Arc<Mutex<Settings>>) -> Self {
         let (tx, rx) = mpsc::channel::<TaskPromptManagerState>(8);
         let (broadcast_tx, _) = broadcast::channel::<TaskPromptManagerState>(8);
         TaskPromptManager {
@@ -33,6 +34,7 @@ impl TaskPromptManager {
             rx: Arc::new(Mutex::new(rx)),
             broadcast_tx,
             task_prompt_manager_join_handle: None,
+            settings,
         }
     }
 
@@ -60,6 +62,8 @@ impl TaskPromptManager {
 
         let _ = broadcast_tx.send(TaskPromptManagerState::PendingPrompt);
 
+        let settings_handle = self.settings.clone();
+
         let task_prompt_manager_run_handle = thread::spawn(move || {
             let mut rx = rx.lock().unwrap(); // Lock the receiver
             loop {
@@ -70,11 +74,18 @@ impl TaskPromptManager {
                     TaskPromptManagerState::PendingPrompt => {
                         std::mem::drop(current_state);
                         rt.block_on(async {
+                            let sleep_duration = {
+                                settings_handle
+                                    .lock()
+                                    .unwrap()
+                                    .get_task_prompt_delay()
+                                    .clone()
+                            };
                             tokio::select! {
                                 Some(new_state) = rx.recv() => {
                                     *state.lock().unwrap() = new_state;
                                 },
-                                _ = sleep(Duration::from_millis(SLEEP_DURATION_MILLIS)) => {
+                                _ = sleep(sleep_duration) => {
                                     *state.lock().unwrap() = TaskPromptManagerState::AwaitingPrompt;
                                 }
                             }
@@ -131,8 +142,11 @@ impl Drop for TaskPromptManager {
 
 #[cfg(test)]
 mod tests {
+    use std::{ops::Add, sync::Arc, time::Duration};
+
     use super::*;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
+    use tempfile::TempDir;
 
     async fn change_state(
         task_prompt_manager: &mut TaskPromptManager,
@@ -146,10 +160,23 @@ mod tests {
         let _ = task_prompt_manager.broadcast_tx.send(state);
     }
 
+    #[fixture]
+    pub fn settings() -> (Arc<Mutex<Settings>>, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+
+        (
+            Arc::new(Mutex::new(Settings::from_dir(
+                temp_dir.path().to_path_buf(),
+            ))),
+            temp_dir,
+        )
+    }
+
     #[rstest]
     #[tokio::test]
-    async fn test_initial_state() {
-        let manager = TaskPromptManager::new();
+    async fn test_initial_state(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let manager = TaskPromptManager::new(settings);
         assert_eq!(
             manager.get_state(),
             TaskPromptManagerState::Stopped,
@@ -159,8 +186,9 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_start_changes_state_to_pending_prompt() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_start_changes_state_to_pending_prompt(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
         let state = manager.get_state();
 
@@ -173,8 +201,9 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_start_then_drop() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_start_then_drop(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
 
         std::mem::drop(manager);
@@ -182,16 +211,18 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_drop_immediate() {
-        let manager = TaskPromptManager::new();
+    async fn test_drop_immediate(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let manager = TaskPromptManager::new(settings);
 
         std::mem::drop(manager);
     }
 
     #[rstest]
     #[tokio::test]
-    async fn test_stop_changes_state_to_stopped() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_stop_changes_state_to_stopped(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
 
         change_state(&mut manager, TaskPromptManagerState::Stopped).await;
@@ -218,8 +249,9 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_state_transition_via_mpsc_channel() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_state_transition_via_mpsc_channel(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
 
         let tx = manager.tx.clone();
@@ -237,8 +269,9 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_broadcasting_state_changes() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_broadcasting_state_changes(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
 
         let mut subscriber = manager.subscribe();
@@ -256,8 +289,9 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_broadcast_no_more_receivers() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_broadcast_no_more_receivers(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
 
         let mut subscriber = manager.subscribe();
@@ -278,11 +312,20 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_state_resets_after_sleep_duration() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_state_resets_after_sleep_duration(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        {
+            settings
+                .lock()
+                .unwrap()
+                .update_task_prompt_delay(Duration::from_secs(1));
+        }
+        let task_prompt_delay = { settings.lock().unwrap().get_task_prompt_delay().clone() };
+
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
 
-        tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS + 500)).await; // Wait for sleep duration
+        tokio::time::sleep(task_prompt_delay.add(Duration::from_millis(500))).await; // Wait for sleep duration
         let state = manager.get_state();
 
         assert_eq!(
@@ -294,11 +337,25 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn test_state_change_resets_sleep_duration() {
-        let mut manager = TaskPromptManager::new();
+    async fn test_state_change_resets_sleep_duration(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        {
+            settings
+                .lock()
+                .unwrap()
+                .update_task_prompt_delay(Duration::from_secs(1));
+        }
+        let task_prompt_delay = { settings.lock().unwrap().get_task_prompt_delay().clone() };
+
+        let mut manager = TaskPromptManager::new(settings);
         manager.start();
 
-        tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS / 2)).await;
+        tokio::time::sleep(
+            task_prompt_delay
+                .div_f32(2.0)
+                .add(Duration::from_millis(250)),
+        )
+        .await;
 
         // Reset the prompt timer
         manager
@@ -308,7 +365,12 @@ mod tests {
             .await
             .unwrap();
 
-        tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS / 2 + 500)).await; // Wait for sleep duration
+        tokio::time::sleep(
+            task_prompt_delay
+                .div_f32(2.0)
+                .add(Duration::from_millis(400)),
+        )
+        .await; // Wait for sleep duration
         let state = manager.get_state();
         assert_eq!(
             state,
@@ -316,7 +378,7 @@ mod tests {
             "State should still be PendingPrompt after reset"
         );
 
-        tokio::time::sleep(Duration::from_millis(SLEEP_DURATION_MILLIS / 2)).await;
+        tokio::time::sleep(task_prompt_delay.div_f32(2.0)).await;
         let state = manager.get_state();
         assert_eq!(
             state,

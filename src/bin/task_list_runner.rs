@@ -5,9 +5,10 @@ use std::sync::{Arc, Mutex};
 use chrono::Local;
 // it's an example
 use eframe::egui;
-use kronos::{task_list::TaskList, widget::task_list_widget::TaskListWidget};
+use kronos::{settings::Settings, task_list::TaskList, widget::task_list_widget::TaskListWidget};
 
 fn main() {
+    let settings = Settings::new();
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_always_on_top()
@@ -16,7 +17,9 @@ fn main() {
     };
 
     let task_list_widget = TaskListWidget::new(TaskList::new(
-        Arc::new(Mutex::new(kronos::establish_connection())),
+        Arc::new(Mutex::new(kronos::establish_connection(
+            settings.get_database_file_path().to_str().unwrap(),
+        ))),
         Local::now().date_naive(),
     ));
     eframe::run_native(

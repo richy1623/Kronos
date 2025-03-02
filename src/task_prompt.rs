@@ -101,14 +101,14 @@ impl TaskPrompt {
 mod tests {
     use std::{
         fs,
-        path::Path,
         sync::{Arc, Mutex},
     };
 
     use crate::{
+        MIGRATIONS,
         model::latest_task::LatestTaskManager,
         schema::{task, task_performed},
-        MIGRATIONS,
+        settings::Settings,
     };
 
     use super::*;
@@ -148,9 +148,10 @@ mod tests {
     #[fixture]
     #[once]
     pub fn latest_task_manager() -> Arc<RwLock<LatestTaskManager>> {
-        Arc::new(RwLock::new(LatestTaskManager::from_file_location(
-            Path::new("test").join("task_prompt"),
-        )))
+        // TODO
+        Arc::new(RwLock::new(LatestTaskManager::new(Arc::new(Mutex::new(
+            Settings::new(),
+        )))))
     }
 
     #[rstest]

@@ -1,12 +1,13 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 use chrono::Local;
 use serde::{Deserialize, Serialize};
 
-use crate::DATA_STORAGE_PATH;
+use crate::settings::Settings;
 
 pub const LATEST_TASK_FILE_NAME: &str = "latest_task.json";
 
@@ -17,60 +18,54 @@ pub struct LatestTask {
 }
 
 pub struct LatestTaskManager {
-    last_task_file_location: PathBuf,
+    settings: Arc<Mutex<Settings>>,
 }
 
 impl LatestTaskManager {
-    pub fn new() -> Self {
-        LatestTaskManager {
-            last_task_file_location: Path::new(DATA_STORAGE_PATH).to_path_buf(),
-        }
-    }
-
-    pub fn from_file_location(last_task_file_location: PathBuf) -> Self {
-        if fs::metadata(&last_task_file_location).is_err() {
-            fs::create_dir_all(&last_task_file_location).unwrap();
-        }
-        LatestTaskManager {
-            last_task_file_location,
-        }
+    pub fn new(settings: Arc<Mutex<Settings>>) -> Self {
+        LatestTaskManager { settings }
     }
 
     fn get_latest_task_file_path(&self) -> PathBuf {
-        Path::new(&self.last_task_file_location).join(LATEST_TASK_FILE_NAME)
+        Path::new(&self.settings.lock().unwrap().get_data_storage_path())
+            .join(LATEST_TASK_FILE_NAME)
     }
 
     pub fn get_latest_task_file_location(&self) -> PathBuf {
-        self.last_task_file_location.clone()
+        self.settings
+            .lock()
+            .unwrap()
+            .get_data_storage_path()
+            .clone()
     }
 
-    pub fn update_latest_task_file_location(&mut self, new_last_task_performed_file_path: PathBuf) {
-        let old_file_path = self.get_latest_task_file_path();
-        let latest_task_performed = self.get_latest_task_performed();
-        self.last_task_file_location = new_last_task_performed_file_path;
-        if fs::metadata(&self.last_task_file_location).is_err() {
-            fs::create_dir_all(&self.last_task_file_location).unwrap();
-        }
-        fs::write(
-            self.get_latest_task_file_path(),
-            serde_json::to_string(&latest_task_performed).expect("Failed to serialize"),
-        )
-        .expect(&format!(
-            "Failed to save file: \"{}\"",
-            self.get_latest_task_file_path()
-                .to_str()
-                .unwrap_or("<unable to print path>")
-        ));
+    // pub fn update_latest_task_file_location(&mut self, new_last_task_performed_file_path: PathBuf) {
+    //     let old_file_path = self.get_latest_task_file_path();
+    //     let latest_task_performed = self.get_latest_task_performed();
+    //     self.last_task_file_location = new_last_task_performed_file_path;
+    //     if fs::metadata(&self.last_task_file_location).is_err() {
+    //         fs::create_dir_all(&self.last_task_file_location).unwrap();
+    //     }
+    //     fs::write(
+    //         self.get_latest_task_file_path(),
+    //         serde_json::to_string(&latest_task_performed).expect("Failed to serialize"),
+    //     )
+    //     .expect(&format!(
+    //         "Failed to save file: \"{}\"",
+    //         self.get_latest_task_file_path()
+    //             .to_str()
+    //             .unwrap_or("<unable to print path>")
+    //     ));
 
-        if fs::metadata(&old_file_path).is_ok() {
-            if fs::remove_file(&old_file_path).is_err() {
-                log::error!(
-                    "Failed to delete file: '{}'",
-                    old_file_path.to_str().unwrap_or("<unable to print path>")
-                )
-            }
-        }
-    }
+    //     if fs::metadata(&old_file_path).is_ok() {
+    //         if fs::remove_file(&old_file_path).is_err() {
+    //             log::error!(
+    //                 "Failed to delete file: '{}'",
+    //                 old_file_path.to_str().unwrap_or("<unable to print path>")
+    //             )
+    //         }
+    //     }
+    // }
 
     pub fn get_latest_task_performed(&self) -> LatestTask {
         {
@@ -80,7 +75,7 @@ impl LatestTaskManager {
                     return LatestTask {
                         task_id: None,
                         date_time_performed: Local::now(),
-                    }
+                    };
                 }
             };
             serde_json::from_str(&data).unwrap()
@@ -107,12 +102,13 @@ impl LatestTaskManager {
     }
 }
 
-// TODO make tests use temp dirs
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::{DateTime, Local};
+    use rstest::{fixture, rstest};
     use std::fs;
+    use tempfile::TempDir;
 
     /// Helper function to parse the `date_time_performed` and allow time comparison with tolerance
     fn assert_date_time_close(
@@ -129,77 +125,57 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_latest_task_manager_new() {
-        let latest_task_manager = LatestTaskManager::new();
-        assert_eq!(
-            latest_task_manager
-                .last_task_file_location
-                .to_str()
-                .unwrap(),
-            DATA_STORAGE_PATH
+    #[fixture]
+    pub fn settings() -> (Arc<Mutex<Settings>>, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+
+        (
+            Arc::new(Mutex::new(Settings::from_dir(
+                temp_dir.path().to_path_buf(),
+            ))),
+            temp_dir,
+        )
+    }
+
+    #[rstest]
+    fn test_latest_task_manager_new(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
+        let latest_task_manager: LatestTaskManager = LatestTaskManager::new(settings.clone());
+
+        let latest_task_location = latest_task_manager.get_latest_task_file_path();
+        assert!(
+            latest_task_location.ends_with(LATEST_TASK_FILE_NAME),
+            "latest_task_location path does not end in the expected file name. Expected '.../{}', found '{}'",
+            LATEST_TASK_FILE_NAME,
+            latest_task_location.to_str().unwrap()
         );
-        assert_eq!(
-            latest_task_manager
-                .get_latest_task_file_location()
-                .to_str()
-                .unwrap(),
-            DATA_STORAGE_PATH
+        assert!(
+            latest_task_location.starts_with(&settings.lock().unwrap().get_data_storage_path())
         );
+
         assert_eq!(
-            latest_task_manager.get_latest_task_file_path(),
-            Path::new("data").join(LATEST_TASK_FILE_NAME)
+            latest_task_manager.get_latest_task_file_location().to_str(),
+            settings.lock().unwrap().get_data_storage_path().to_str()
         );
     }
 
-    #[test]
-    fn test_latest_task_manager_from_file_location() {
-        let test_file_path = Path::new("test").join("latest_task_from_location");
-        // Delete the path if it exists
-        if fs::metadata(test_file_path.clone()).is_ok() {
-            if fs::metadata(test_file_path.join(LATEST_TASK_FILE_NAME)).is_ok() {
-                fs::remove_file(test_file_path.join(LATEST_TASK_FILE_NAME)).unwrap();
-            }
-            fs::remove_dir(test_file_path.clone()).unwrap();
-        }
+    #[rstest]
+    fn test_get_latest_task_performed_no_such_task(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
         // Create the latest_task_manager
-        let latest_task_manager = LatestTaskManager::from_file_location(test_file_path.clone());
-        assert_eq!(latest_task_manager.last_task_file_location, test_file_path);
-        assert_eq!(
-            latest_task_manager.get_latest_task_file_location(),
-            test_file_path
-        );
-        assert!(fs::metadata(test_file_path.clone()).is_ok());
-        assert_eq!(
-            latest_task_manager.get_latest_task_file_path(),
-            test_file_path.join(LATEST_TASK_FILE_NAME)
-        );
-    }
-
-    #[test]
-    fn test_get_latest_task_performed_no_such_task() {
-        let test_file_path = Path::new("test").join("latest_task_performed_no_such_task");
-        // Delete the path if it exists
-        if fs::metadata(&test_file_path).is_ok() {
-            if fs::metadata(test_file_path.join(LATEST_TASK_FILE_NAME)).is_ok() {
-                fs::remove_file(test_file_path.join(LATEST_TASK_FILE_NAME)).unwrap();
-            }
-            fs::remove_dir(test_file_path.clone()).unwrap();
-        }
-        // Create the latest_task_manager
-        let latest_task_manager = LatestTaskManager::from_file_location(test_file_path.clone());
+        let latest_task_manager = LatestTaskManager::new(settings);
 
         let latest_task = latest_task_manager.get_latest_task_performed();
         assert_eq!(latest_task.task_id, None);
         assert_date_time_close(&latest_task.date_time_performed, &Local::now());
     }
 
-    #[test]
-    fn test_get_latest_task_performed_with_task() {
-        let test_file_path = Path::new("test").join("latest_task_performed_with_task");
+    #[rstest]
+    fn test_get_latest_task_performed_with_task(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
 
         // Create the latest_task_manager
-        let latest_task_manager = LatestTaskManager::from_file_location(test_file_path.clone());
+        let latest_task_manager = LatestTaskManager::new(settings);
 
         // Set the task
         let latest_task = LatestTask {
@@ -225,12 +201,12 @@ mod tests {
         assert_eq!(latest_task_found, latest_task);
     }
 
-    #[test]
-    fn test_update_latest_task_performed() {
-        let test_file_path = Path::new("test").join("update_latest_task");
+    #[rstest]
+    fn test_update_latest_task_performed(settings: (Arc<Mutex<Settings>>, TempDir)) {
+        let (settings, _temp_dir) = settings;
 
         // Create the latest_task_manager
-        let mut latest_task_manager = LatestTaskManager::from_file_location(test_file_path.clone());
+        let mut latest_task_manager = LatestTaskManager::new(settings);
 
         // Set the task
         let latest_task = LatestTask {
@@ -259,39 +235,39 @@ mod tests {
         assert_date_time_close(&latest_task_found.date_time_performed, &Local::now());
     }
 
-    #[test]
-    fn test_change_latest_task_dir() {
-        let test_file_path_before = Path::new("test").join("change_dir_before");
+    // #[rstest]
+    // fn test_change_latest_task_dir(settings: (Arc<Mutex<Settings>>, TempDir)) {
+    //     let (settings, _temp_dir) = settings;
+    //     let test_file_path_before = Path::new("test").join("change_dir_before");
 
-        let test_file_path_after = Path::new("test").join("change_dir_after");
-        // Delete the path if it exists
-        if fs::metadata(&test_file_path_after).is_ok() {
-            if fs::metadata(test_file_path_after.join(LATEST_TASK_FILE_NAME)).is_ok() {
-                fs::remove_file(test_file_path_after.join(LATEST_TASK_FILE_NAME)).unwrap();
-            }
-            fs::remove_dir(test_file_path_after.clone()).unwrap();
-        }
+    //     let test_file_path_after = Path::new("test").join("change_dir_after");
+    //     // Delete the path if it exists
+    //     if fs::metadata(&test_file_path_after).is_ok() {
+    //         if fs::metadata(test_file_path_after.join(LATEST_TASK_FILE_NAME)).is_ok() {
+    //             fs::remove_file(test_file_path_after.join(LATEST_TASK_FILE_NAME)).unwrap();
+    //         }
+    //         fs::remove_dir(test_file_path_after.clone()).unwrap();
+    //     }
 
-        // Create the latest_task_manager
-        let mut latest_task_manager =
-            LatestTaskManager::from_file_location(test_file_path_before.clone());
+    //     // Create the latest_task_manager
+    //     let mut latest_task_manager = LatestTaskManager::new(settings);
 
-        let latest_task = latest_task_manager.update_latest_task_performed(Some(1));
+    //     let latest_task = latest_task_manager.update_latest_task_performed(Some(1));
 
-        // Update the file location
-        latest_task_manager.update_latest_task_file_location(test_file_path_after.clone());
+    //     // Update the file location
+    //     latest_task_manager.update_latest_task_file_location(test_file_path_after.clone());
 
-        // Verify
-        assert_eq!(
-            &latest_task_manager.get_latest_task_file_location(),
-            &test_file_path_after
-        );
-        assert_eq!(
-            &latest_task_manager.get_latest_task_file_path(),
-            &test_file_path_after.join(LATEST_TASK_FILE_NAME)
-        );
-        assert_eq!(latest_task_manager.get_latest_task_performed(), latest_task);
+    //     // Verify
+    //     assert_eq!(
+    //         &latest_task_manager.get_latest_task_file_location(),
+    //         &test_file_path_after
+    //     );
+    //     assert_eq!(
+    //         &latest_task_manager.get_latest_task_file_path(),
+    //         &test_file_path_after.join(LATEST_TASK_FILE_NAME)
+    //     );
+    //     assert_eq!(latest_task_manager.get_latest_task_performed(), latest_task);
 
-        assert!(fs::metadata(test_file_path_before.join(LATEST_TASK_FILE_NAME)).is_err());
-    }
+    //     assert!(fs::metadata(test_file_path_before.join(LATEST_TASK_FILE_NAME)).is_err());
+    // }
 }
