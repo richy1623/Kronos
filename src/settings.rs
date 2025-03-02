@@ -55,7 +55,7 @@ impl Settings {
                     .to_str()
                     .unwrap_or("<unable to print path>")
             );
-            std::fs::create_dir(application_storage_path.as_path()).expect(&format!(
+            std::fs::create_dir_all(application_storage_path.as_path()).expect(&format!(
                 "Failed to create application save directory '{}'",
                 APPLICATION_STORAGE_PATH
                     .to_str()
