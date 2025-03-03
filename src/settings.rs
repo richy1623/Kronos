@@ -219,7 +219,7 @@ mod tests {
         )
         .unwrap();
 
-        let path_to_test_resource = PathBuf::from("test")
+        let path_to_test_resource = PathBuf::from("tests")
             .join("res")
             .join("test_read_settings.json");
         let path_to_settings_file_location = temp_dir
