@@ -227,15 +227,12 @@ mod tests {
             .join(APPLICATION_NAME)
             .join(SETTINGS_DIRECTORY_NAME)
             .join(SETTINGS_FILE_NAME);
-        fs::copy(
+        fs::copy(&path_to_test_resource, &path_to_settings_file_location).expect(&format!(
+            "Failed to copy file '{:?}' to '{:?}'.\nResult of checking for file: {:?}",
             &path_to_test_resource,
             &path_to_settings_file_location,
-        )
-        .expect(&format!("Failed to copy file '{:?}' to '{:?}'.\nResult of checking for file: {:?}\nResult of checking for dir: {:?}", 
-            &path_to_test_resource, 
-            &path_to_settings_file_location, 
-            fs::metadata(&path_to_test_resource), 
-            fs::metadata(&path_to_settings_file_location)));
+            fs::metadata(&path_to_test_resource),
+        ));
 
         let settings = Settings::from_dir(temp_dir.path().join(APPLICATION_NAME));
 
