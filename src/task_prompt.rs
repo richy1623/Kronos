@@ -99,11 +99,6 @@ impl TaskPrompt {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        sync::{Arc, Mutex},
-    };
-
     use crate::{
         MIGRATIONS,
         model::latest_task::LatestTaskManager,
@@ -117,16 +112,19 @@ mod tests {
     use diesel_migrations::MigrationHarness;
     use rstest::*;
     use serial_test::serial;
-
-    const DATABASE_URL: &str = "test/task_prompt_test_database.db";
+    use tempfile::TempDir;
 
     #[fixture]
     #[once]
-    pub fn db_connection() -> Arc<Mutex<SqliteConnection>> {
-        fs::create_dir_all("test").unwrap();
+    pub fn db_connection() -> (Arc<Mutex<SqliteConnection>>, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+
+        let path_to_db = temp_dir.path().join("task_prompt_test_database.db");
+        let path_to_db = path_to_db.to_str().unwrap();
+
         let db_connection = Arc::new(Mutex::new(
-            SqliteConnection::establish(&DATABASE_URL)
-                .unwrap_or_else(|_| panic!("Error connecting to {}", DATABASE_URL)),
+            SqliteConnection::establish(path_to_db)
+                .unwrap_or_else(|_| panic!("Error connecting to {}", path_to_db)),
         ));
         db_connection
             .lock()
@@ -142,24 +140,28 @@ mod tests {
             .execute(&mut *db_connection.lock().unwrap())
             .expect("Failed to delete all records from table `task_performed`");
 
-        db_connection
+        (db_connection, temp_dir)
     }
 
     #[fixture]
     #[once]
-    pub fn latest_task_manager() -> Arc<RwLock<LatestTaskManager>> {
+    pub fn latest_task_manager(
+        db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir),
+    ) -> Arc<RwLock<LatestTaskManager>> {
         // TODO
+        let (_db_connection, temp_dir) = db_connection;
         Arc::new(RwLock::new(LatestTaskManager::new(Arc::new(Mutex::new(
-            Settings::new(),
+            Settings::from_dir(temp_dir.path().to_path_buf()),
         )))))
     }
 
     #[rstest]
     #[serial]
     fn test_create_new_task_prompt(
-        db_connection: &Arc<Mutex<SqliteConnection>>,
+        db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir),
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
     ) {
+        let (db_connection, _temp_dir) = db_connection;
         let mut connection = db_connection.lock().unwrap();
         let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
 
@@ -203,9 +205,10 @@ mod tests {
     #[rstest]
     #[serial]
     fn test_get_time_spent_minutes(
-        db_connection: &Arc<Mutex<SqliteConnection>>,
+        db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir),
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
     ) {
+        let (db_connection, _temp_dir) = db_connection;
         let current_time = Local::now();
 
         let earlier = current_time
@@ -230,9 +233,10 @@ mod tests {
     #[rstest]
     #[serial]
     fn test_update_task_with_exiting_task(
-        db_connection: &Arc<Mutex<SqliteConnection>>,
+        db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir),
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
     ) {
+        let (db_connection, _temp_dir) = db_connection;
         let connection = db_connection.clone();
         let mut connection = connection.lock().unwrap();
         let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
@@ -292,9 +296,10 @@ mod tests {
     #[rstest]
     #[serial]
     fn test_update_task_with_exiting_task_no_task_performed(
-        db_connection: &Arc<Mutex<SqliteConnection>>,
+        db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir),
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
     ) {
+        let (db_connection, _temp_dir) = db_connection;
         let mut connection = db_connection.lock().unwrap();
         let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
 
@@ -359,9 +364,10 @@ mod tests {
     #[rstest]
     #[serial]
     fn test_update_task_with_new_task(
-        db_connection: &Arc<Mutex<SqliteConnection>>,
+        db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir),
         latest_task_manager: &Arc<RwLock<LatestTaskManager>>,
     ) {
+        let (db_connection, _temp_dir) = db_connection;
         let mut latest_task_manager_setup = latest_task_manager.write().unwrap();
         latest_task_manager_setup.update_latest_task_performed(None);
 

@@ -165,26 +165,26 @@ impl TaskPerformed {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        sync::{Arc, Mutex},
-    };
+    use std::sync::{Arc, Mutex};
 
-    use crate::{model::task::Task, schema::task, MIGRATIONS};
+    use crate::{MIGRATIONS, model::task::Task, schema::task};
 
     use super::*;
     use diesel_migrations::MigrationHarness;
     use rstest::*;
-
-    const DATABASE_URL: &str = "test/task_performed_test_database.db";
+    use tempfile::TempDir;
 
     #[fixture]
     #[once]
-    pub fn connection() -> Arc<Mutex<SqliteConnection>> {
-        fs::create_dir_all("test").unwrap();
+    pub fn connection() -> (Arc<Mutex<SqliteConnection>>, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+
+        let path_to_db = temp_dir.path().join("test_task_performed.db");
+        let path_to_db = path_to_db.to_str().unwrap();
+
         let connection = Arc::new(Mutex::new(
-            SqliteConnection::establish(&DATABASE_URL)
-                .unwrap_or_else(|_| panic!("Error connecting to {}", DATABASE_URL)),
+            SqliteConnection::establish(&path_to_db)
+                .unwrap_or_else(|_| panic!("Error connecting to {}", path_to_db)),
         ));
         connection
             .lock()
@@ -198,11 +198,13 @@ mod tests {
         diesel::delete(task::table)
             .execute(&mut *connection.lock().unwrap())
             .expect("Failed to delete all records from table `task`");
-        connection
+        (connection, temp_dir)
     }
 
     #[rstest]
-    fn get_task_by_task_id_and_date(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn get_task_by_task_id_and_date(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
+
         let mut connection = connection.lock().unwrap();
 
         let task = Task::create_task("task_performed", &mut connection).unwrap();
@@ -225,7 +227,8 @@ mod tests {
     }
 
     #[rstest]
-    fn get_all_tasks_by_task_id(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn get_all_tasks_by_task_id(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
         let task1 = Task::create_task("task_performed_with_id_1", &mut connection).unwrap();
@@ -271,7 +274,8 @@ mod tests {
     }
 
     #[rstest]
-    fn get_all_tasks_by_date(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn get_all_tasks_by_date(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
         let task1 = Task::create_task("task_performed_with_date_1", &mut connection).unwrap();
@@ -316,7 +320,8 @@ mod tests {
     }
 
     #[rstest]
-    fn update_task_performed(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn update_task_performed(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
         let task = Task::create_task("task_performed_update", &mut connection).unwrap();
@@ -353,7 +358,8 @@ mod tests {
     }
 
     #[rstest]
-    fn insert_task_performed(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn insert_task_performed(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
         let task = Task::create_task("task_performed_insert", &mut connection).unwrap();
@@ -380,7 +386,8 @@ mod tests {
     }
 
     #[rstest]
-    fn delete_task_performed(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn delete_task_performed(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
         let task = Task::create_task("task_performed_delete", &mut connection).unwrap();
@@ -412,7 +419,8 @@ mod tests {
     }
 
     #[rstest]
-    fn delete_task_performed_no_such_task(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn delete_task_performed_no_such_task(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection: std::sync::MutexGuard<'_, SqliteConnection> =
             connection.lock().unwrap();
 
@@ -423,18 +431,23 @@ mod tests {
     }
 
     #[rstest]
-    fn test_insert_or_overwrite_task_performed(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_insert_or_overwrite_task_performed(
+        connection: &(Arc<Mutex<SqliteConnection>>, TempDir),
+    ) {
+        let (connection, _temp_dir) = connection;
         let mut connection: std::sync::MutexGuard<'_, SqliteConnection> =
             connection.lock().unwrap();
 
         let task = Task::create_task("task_performed_to_overwrite", &mut connection).unwrap();
 
-        assert!(TaskPerformed::get_task_by_task_id_and_date(
-            task.id,
-            &String::from("2000-08-14"),
-            &mut connection
-        )
-        .is_none());
+        assert!(
+            TaskPerformed::get_task_by_task_id_and_date(
+                task.id,
+                &String::from("2000-08-14"),
+                &mut connection
+            )
+            .is_none()
+        );
 
         let task_to_insert = TaskPerformed {
             date: String::from("2000-08-14"),

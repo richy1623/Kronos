@@ -213,7 +213,8 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         std::fs::create_dir(temp_dir.path().join(SETTINGS_DIRECTORY_NAME)).unwrap();
         fs::copy(
-            PathBuf::from("test_res")
+            PathBuf::from("test")
+                .join("res")
                 .join("test_read_settings.json")
                 .as_path(),
             temp_dir

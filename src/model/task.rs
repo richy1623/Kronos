@@ -8,7 +8,7 @@ use regex::Regex;
 pub struct Task {
     pub id: i32,
     pub name: String,
-    pub last_used: i32
+    pub last_used: i32,
 }
 
 impl Task {
@@ -71,9 +71,7 @@ impl Task {
     ) -> Result<Self, Error> {
         let task = Task::get_task_by_name(task_name, connection);
         match task {
-            Some(task) => {
-                Task::update_task_last_used(&task.name, connection)
-            }
+            Some(task) => Task::update_task_last_used(&task.name, connection),
             None => Task::create_task(task_name, connection),
         }
     }
@@ -133,27 +131,29 @@ impl Task {
 #[cfg(test)]
 mod tests {
     use std::{
-        fs,
         sync::{Arc, Mutex},
         thread,
         time::Duration,
     };
 
-    use crate::{model::task_performed::TaskPerformed, MIGRATIONS};
+    use crate::{MIGRATIONS, model::task_performed::TaskPerformed};
 
     use super::*;
     use diesel_migrations::MigrationHarness;
     use rstest::*;
-
-    const DATABASE_URL: &str = "test/task_test_database.db";
+    use tempfile::TempDir;
 
     #[fixture]
     #[once]
-    pub fn connection() -> Arc<Mutex<SqliteConnection>> {
-        fs::create_dir_all("test").unwrap();
+    pub fn connection() -> (Arc<Mutex<SqliteConnection>>, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+
+        let path_to_db = temp_dir.path().join("test_task_performed.db");
+        let path_to_db = path_to_db.to_str().unwrap();
+
         let connection = Arc::new(Mutex::new(
-            SqliteConnection::establish(&DATABASE_URL)
-                .unwrap_or_else(|_| panic!("Error connecting to {}", DATABASE_URL)),
+            SqliteConnection::establish(&path_to_db)
+                .unwrap_or_else(|_| panic!("Error connecting to {}", path_to_db)),
         ));
         connection
             .lock()
@@ -164,39 +164,36 @@ mod tests {
         diesel::delete(task::table)
             .execute(&mut *connection.lock().unwrap())
             .expect("Failed to delete all records from table `task`");
-        connection
+        (connection, temp_dir)
     }
 
     #[rstest]
-    fn get_task_by_name_valid(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn get_task_by_name_valid(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
+
         let mut connection = connection.lock().unwrap();
 
-        let inserted_task =
-            Task::create_task("get_task_by_name_valid", &mut connection).unwrap();
-        let fetched_task =
-            Task::get_task_by_name(&inserted_task.name, &mut connection);
+        let inserted_task = Task::create_task("get_task_by_name_valid", &mut connection).unwrap();
+        let fetched_task = Task::get_task_by_name(&inserted_task.name, &mut connection);
         assert!(fetched_task.is_some());
         let fetched_task = fetched_task.unwrap();
         assert_eq!(fetched_task, inserted_task);
     }
 
     #[rstest]
-    fn get_task_by_name_no_such_task_name(
-        connection: &Arc<Mutex<SqliteConnection>>,
-    ) {
+    fn get_task_by_name_no_such_task_name(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
-        assert!(
-            Task::get_task_by_name("i_do_not_exist", &mut connection).is_none()
-        );
+        assert!(Task::get_task_by_name("i_do_not_exist", &mut connection).is_none());
     }
 
     #[rstest]
-    fn get_task_by_id_valid(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn get_task_by_id_valid(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
-        let inserted_task =
-            Task::create_task("get_task_by_id_valid", &mut connection).unwrap();
+        let inserted_task = Task::create_task("get_task_by_id_valid", &mut connection).unwrap();
         let fetched_task = Task::get_task_by_id(inserted_task.id, &mut connection);
         assert!(fetched_task.is_some());
         let fetched_task = fetched_task.unwrap();
@@ -204,32 +201,31 @@ mod tests {
     }
 
     #[rstest]
-    fn get_task_by_id_no_such_task_name(
-        connection: &Arc<Mutex<SqliteConnection>>,
-    ) {
+    fn get_task_by_id_no_such_task_name(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
         assert!(Task::get_task_by_id(-1, &mut connection).is_none());
     }
 
     #[rstest]
-    fn create_task_valid(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn create_task_valid(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
-        let task: Result<Task, Error> =
-            Task::create_task("task_name", &mut connection);
+        let task: Result<Task, Error> = Task::create_task("task_name", &mut connection);
         assert!(task.is_ok());
         let task = task.unwrap();
         assert_eq!(task.name, "task_name");
     }
 
     #[rstest]
-    fn create_task_invalid(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn create_task_invalid(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
         let _ = Task::create_task("task_name_repeated", &mut connection).unwrap();
-        let task: Result<Task, Error> =
-            Task::create_task("task_name_repeated", &mut connection);
+        let task: Result<Task, Error> = Task::create_task("task_name_repeated", &mut connection);
         assert!(task.is_err());
         let task_err: Error = task.unwrap_err();
         matches!(
@@ -239,65 +235,57 @@ mod tests {
     }
 
     #[rstest]
-    fn update_task_last_used(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn update_task_last_used(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
-        let task_before_update =
-            Task::create_task("task_name_to_update", &mut connection).unwrap();
+        let task_before_update = Task::create_task("task_name_to_update", &mut connection).unwrap();
         thread::sleep(Duration::from_millis(1000));
         let task_after_update =
-            Task::update_task_last_used("task_name_to_update", &mut connection)
-                .unwrap();
+            Task::update_task_last_used("task_name_to_update", &mut connection).unwrap();
 
         assert!(task_before_update.last_used < task_after_update.last_used);
     }
 
     #[rstest]
-    fn get_or_create_task(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn get_or_create_task(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
-        let task =
-            Task::create_task("get_or_create_task", &mut connection).unwrap();
+        let task = Task::create_task("get_or_create_task", &mut connection).unwrap();
         thread::sleep(Duration::from_millis(1000));
 
-        let same_task_fetched = Task::get_or_create_task(
-            "get_or_create_task",
-            &mut connection,
-        )
-        .unwrap();
+        let same_task_fetched =
+            Task::get_or_create_task("get_or_create_task", &mut connection).unwrap();
         assert_eq!(task.id, same_task_fetched.id);
         assert_eq!(task.last_used, same_task_fetched.last_used);
 
-        let new_task_fetched = Task::get_or_create_task(
-            "get_or_create_task_new",
-            &mut connection,
-        )
-        .unwrap();
+        let new_task_fetched =
+            Task::get_or_create_task("get_or_create_task_new", &mut connection).unwrap();
         assert_ne!(task.id, new_task_fetched.id);
         assert_ne!(task.last_used, new_task_fetched.last_used);
     }
 
     #[rstest]
-    fn get_or_create_task_with_update(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn get_or_create_task_with_update(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
-        let task_before_update = Task::create_task(
-            "get_or_create_task_with_update",
-            &mut connection,
-        )
-        .unwrap();
+        let task_before_update =
+            Task::create_task("get_or_create_task_with_update", &mut connection).unwrap();
 
         thread::sleep(Duration::from_millis(1000));
 
-        let task_after_update = Task::get_or_create_task_with_update(
-            "get_or_create_task_with_update",
-            &mut connection,
-        )
-        .unwrap();
+        let task_after_update =
+            Task::get_or_create_task_with_update("get_or_create_task_with_update", &mut connection)
+                .unwrap();
         assert_eq!(task_before_update.id, task_after_update.id);
-        assert!(task_before_update.last_used < task_after_update.last_used, 
+        assert!(
+            task_before_update.last_used < task_after_update.last_used,
             "Expected task before to have an earlier time than after the update. Times were [task_before_update: {}, task_after_update: {}]",
-            task_before_update.last_used,task_after_update.last_used);
+            task_before_update.last_used,
+            task_after_update.last_used
+        );
 
         let new_task = Task::get_or_create_task_with_update(
             "get_or_create_task_with_update_new",
@@ -309,23 +297,19 @@ mod tests {
     }
 
     #[rstest]
-    fn fetch_most_recent_tasks(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn fetch_most_recent_tasks(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection = connection.lock().unwrap();
 
-        let task_1 =
-            Task::create_task("task_name_recent_1", &mut connection).unwrap();
-        let task_2 =
-            Task::create_task("task_name_recent_2", &mut connection).unwrap();
-        let task_3 =
-            Task::create_task("task_name_recent_3", &mut connection).unwrap();
+        let task_1 = Task::create_task("task_name_recent_1", &mut connection).unwrap();
+        let task_2 = Task::create_task("task_name_recent_2", &mut connection).unwrap();
+        let task_3 = Task::create_task("task_name_recent_3", &mut connection).unwrap();
 
         thread::sleep(Duration::from_millis(1000));
-        Task::update_task_last_used("task_name_recent_3", &mut connection)
-            .unwrap();
+        Task::update_task_last_used("task_name_recent_3", &mut connection).unwrap();
 
         thread::sleep(Duration::from_millis(1000));
-        Task::update_task_last_used("task_name_recent_2", &mut connection)
-            .unwrap();
+        Task::update_task_last_used("task_name_recent_2", &mut connection).unwrap();
 
         let recent_tasks = Task::fetch_most_recent_tasks(3, &mut connection);
         assert_eq!(recent_tasks.len(), 3);
@@ -339,17 +323,23 @@ mod tests {
         assert_eq!(recent_tasks[1].id, task_3.id);
     }
 
-    
     #[rstest]
-    fn test_get_all_matching_tasks(connection: &Arc<Mutex<SqliteConnection>>){
+    fn test_get_all_matching_tasks(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection: std::sync::MutexGuard<'_, SqliteConnection> =
             connection.lock().unwrap();
         let task_1 = Task::create_task("task_match_1", &mut connection).unwrap();
         let task_2 = Task::create_task("task_match_2", &mut connection).unwrap();
         let task_3 = Task::create_task("task_match_3", &mut connection).unwrap();
 
-        assert_eq!(Task::get_all_matching_tasks("task_match", &mut connection), vec![task_3, task_2, task_1]);
-        assert_eq!(Task::get_all_matching_tasks("no_match", &mut connection), vec![]);
+        assert_eq!(
+            Task::get_all_matching_tasks("task_match", &mut connection),
+            vec![task_3, task_2, task_1]
+        );
+        assert_eq!(
+            Task::get_all_matching_tasks("no_match", &mut connection),
+            vec![]
+        );
     }
 
     #[rstest]
@@ -367,7 +357,8 @@ mod tests {
     }
 
     #[rstest]
-    fn delete_unused_tasks(connection: &Arc<Mutex<SqliteConnection>>) {
+    fn delete_unused_tasks(connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (connection, _temp_dir) = connection;
         let mut connection: std::sync::MutexGuard<'_, SqliteConnection> =
             connection.lock().unwrap();
 
@@ -375,10 +366,8 @@ mod tests {
             .execute(&mut *connection)
             .expect("Failed to delete all records from table `task`");
 
-        let task_to_delete =
-            Task::create_task("orphaned_task", &mut connection).unwrap();
-        let task_to_save =
-            Task::create_task("relevant_task", &mut connection).unwrap();
+        let task_to_delete = Task::create_task("orphaned_task", &mut connection).unwrap();
+        let task_to_save = Task::create_task("relevant_task", &mut connection).unwrap();
 
         TaskPerformed::insert_task_performed(
             &TaskPerformed {

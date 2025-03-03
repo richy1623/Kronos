@@ -194,14 +194,11 @@ impl TaskList {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        sync::{Arc, Mutex},
-    };
+    use std::sync::{Arc, Mutex};
 
     use crate::{
-        schema::{task, task_performed},
         MIGRATIONS,
+        schema::{task, task_performed},
     };
 
     use super::*;
@@ -209,16 +206,18 @@ mod tests {
     use diesel_migrations::MigrationHarness;
     use rstest::*;
     use serial_test::serial;
-
-    const DATABASE_URL: &str = "test/task_list_test_database.db";
+    use tempfile::TempDir;
 
     #[fixture]
     #[once]
-    pub fn db_connection() -> Arc<Mutex<SqliteConnection>> {
-        fs::create_dir_all("test").unwrap();
+    pub fn db_connection() -> (Arc<Mutex<SqliteConnection>>, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+
+        let path_to_db = temp_dir.path().join("test_task_list.db");
+        let path_to_db = path_to_db.to_str().unwrap();
         let db_connection = Arc::new(Mutex::new(
-            SqliteConnection::establish(&DATABASE_URL)
-                .unwrap_or_else(|_| panic!("Error connecting to {}", DATABASE_URL)),
+            SqliteConnection::establish(path_to_db)
+                .unwrap_or_else(|_| panic!("Error connecting to {}", path_to_db)),
         ));
         db_connection
             .lock()
@@ -234,12 +233,14 @@ mod tests {
             .execute(&mut *db_connection.lock().unwrap())
             .expect("Failed to delete all records from table `task_performed`");
 
-        db_connection
+        (db_connection, temp_dir)
     }
 
     #[rstest]
     #[serial]
-    fn test_create_new_task(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_create_new_task(db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (db_connection, _temp_dir) = db_connection;
+
         let task_name_1 = "test_task_1";
         let task_name_2 = "test_task_2";
         let time_spent = 60;
@@ -286,7 +287,9 @@ mod tests {
 
     #[rstest]
     #[serial]
-    fn test_change_date(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_change_date(db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (db_connection, _temp_dir) = db_connection;
+
         let task_1 = {
             let connection = db_connection.clone();
             let mut connection = connection.lock().unwrap();
@@ -346,7 +349,9 @@ mod tests {
 
     #[rstest]
     #[serial]
-    fn test_delete_task_performed(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_delete_task_performed(db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (db_connection, _temp_dir) = db_connection;
+
         let connection = db_connection.clone();
         let task_name = "test_delete_task_performed_task";
         let time_spent = 60;
@@ -362,16 +367,20 @@ mod tests {
             assert!(task_list.tasks_for_date.is_empty());
         }
 
-        assert!(TaskPerformed::get_all_tasks_by_date(
-            &date.to_string(),
-            &mut connection.lock().unwrap()
-        )
-        .is_empty());
+        assert!(
+            TaskPerformed::get_all_tasks_by_date(
+                &date.to_string(),
+                &mut connection.lock().unwrap()
+            )
+            .is_empty()
+        );
     }
 
     #[rstest]
     #[serial]
-    fn test_update_task_performed(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_update_task_performed(db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (db_connection, _temp_dir) = db_connection;
+
         let task_name_1 = "test_update_task_performed_task_1";
         let time_spent_1 = 60;
         let task_name_2 = "test_update_task_performed_task_2";
@@ -428,18 +437,22 @@ mod tests {
         {
             let connection = db_connection.clone();
             let mut connection = connection.lock().unwrap();
-            assert!(TaskPerformed::get_task_by_task_id_and_date(
-                task_1_id,
-                &date.to_string(),
-                &mut connection,
-            )
-            .is_none());
-            assert!(TaskPerformed::get_task_by_task_id_and_date(
-                task_2_id,
-                &date.to_string(),
-                &mut connection,
-            )
-            .is_some());
+            assert!(
+                TaskPerformed::get_task_by_task_id_and_date(
+                    task_1_id,
+                    &date.to_string(),
+                    &mut connection,
+                )
+                .is_none()
+            );
+            assert!(
+                TaskPerformed::get_task_by_task_id_and_date(
+                    task_2_id,
+                    &date.to_string(),
+                    &mut connection,
+                )
+                .is_some()
+            );
             let updated_task = Task::get_task_by_name(&updated_task_name, &mut connection).unwrap();
             assert_eq!(updated_task.name, updated_task_name);
 
@@ -460,7 +473,9 @@ mod tests {
 
     #[rstest]
     #[serial]
-    fn test_fetch_most_recent_tasks(db_connection: &Arc<Mutex<SqliteConnection>>) {
+    fn test_fetch_most_recent_tasks(db_connection: &(Arc<Mutex<SqliteConnection>>, TempDir)) {
+        let (db_connection, _temp_dir) = db_connection;
+
         let task_name_1 = "test_fetch_most_recent_tasks_1";
         let task_name_2 = "test_fetch_most_recent_tasks_2";
         let task_name_3 = "test_fetch_most_recent_tasks_3";
