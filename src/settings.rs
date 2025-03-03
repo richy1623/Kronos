@@ -219,18 +219,23 @@ mod tests {
         )
         .unwrap();
 
+        let path_to_test_resource = PathBuf::from("test")
+            .join("res")
+            .join("test_read_settings.json");
+        let path_to_settings_file_location = temp_dir
+            .path()
+            .join(APPLICATION_NAME)
+            .join(SETTINGS_DIRECTORY_NAME)
+            .join(SETTINGS_FILE_NAME);
         fs::copy(
-            PathBuf::from("test")
-                .join("res")
-                .join("test_read_settings.json")
-                .as_path(),
-            temp_dir
-                .path()
-                .join(APPLICATION_NAME)
-                .join(SETTINGS_DIRECTORY_NAME)
-                .join(SETTINGS_FILE_NAME),
+            &path_to_test_resource,
+            &path_to_settings_file_location,
         )
-        .unwrap();
+        .expect(&format!("Failed to copy file '{:?}' to '{:?}'.\nResult of checking for file: {:?}\nResult of checking for dir: {:?}", 
+            &path_to_test_resource, 
+            &path_to_settings_file_location, 
+            fs::metadata(&path_to_test_resource), 
+            fs::metadata(&path_to_settings_file_location)));
 
         let settings = Settings::from_dir(temp_dir.path().join(APPLICATION_NAME));
 
