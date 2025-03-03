@@ -211,7 +211,14 @@ mod tests {
     #[test]
     fn test_read_settings_from_file() {
         let temp_dir = TempDir::new().unwrap();
-        std::fs::create_dir(temp_dir.path().join(SETTINGS_DIRECTORY_NAME)).unwrap();
+        std::fs::create_dir_all(
+            temp_dir
+                .path()
+                .join(APPLICATION_NAME)
+                .join(SETTINGS_DIRECTORY_NAME),
+        )
+        .unwrap();
+
         fs::copy(
             PathBuf::from("test")
                 .join("res")
@@ -219,12 +226,13 @@ mod tests {
                 .as_path(),
             temp_dir
                 .path()
+                .join(APPLICATION_NAME)
                 .join(SETTINGS_DIRECTORY_NAME)
                 .join(SETTINGS_FILE_NAME),
         )
         .unwrap();
 
-        let settings = Settings::from_dir(temp_dir.path().to_path_buf());
+        let settings = Settings::from_dir(temp_dir.path().join(APPLICATION_NAME));
 
         assert_eq!(settings.get_task_prompt_delay(), Duration::from_secs(1));
     }
