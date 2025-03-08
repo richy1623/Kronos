@@ -1,3 +1,4 @@
+pub mod sync_manager;
 pub mod model;
 pub mod schema;
 pub mod settings;

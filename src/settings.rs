@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf, time::Duration};
 
 use once_cell::sync::Lazy;
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
 pub const APPLICATION_NAME: &str = "Kronos";
@@ -8,8 +9,6 @@ pub const DATA_DIRECTORY_NAME: &str = "data";
 pub const DATABASE_FILE_NAME: &str = "database.db";
 pub const SETTINGS_DIRECTORY_NAME: &str = "settings";
 pub const SETTINGS_FILE_NAME: &str = "settings.json";
-
-pub const DEFAULT_TASK_PROMPT_DELAY_SECONDS: u64 = 15 * 60;
 
 pub const APPLICATION_STORAGE_PATH: Lazy<PathBuf> = Lazy::new(|| {
     let mut application_storage_path =
@@ -20,10 +19,14 @@ pub const APPLICATION_STORAGE_PATH: Lazy<PathBuf> = Lazy::new(|| {
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 pub struct Settings {
-    task_prompt_delay: Duration,
+    // File Locations
     data_storage_path: PathBuf,
     database_file_path: PathBuf,
     user_settings_file_path: PathBuf,
+    // Task Prompt Settings
+    task_prompt_delay: Duration,
+    // Sync Settings
+    sync_server_url: Option<Url>,
 }
 
 impl Settings {
@@ -119,10 +122,13 @@ impl Settings {
             "Failed to load existing settings file. Creating new settings with default values."
         );
         Settings {
-            task_prompt_delay: Duration::from_secs(DEFAULT_TASK_PROMPT_DELAY_SECONDS),
+            task_prompt_delay: Duration::from_secs(
+                crate::task_prompt_manager::DEFAULT_TASK_PROMPT_DELAY_SECONDS,
+            ),
             data_storage_path,
             database_file_path,
             user_settings_file_path,
+            sync_server_url: None,
         }
     }
 
@@ -163,6 +169,15 @@ impl Settings {
     pub fn get_user_settings_file_path(&self) -> &PathBuf {
         &self.user_settings_file_path
     }
+
+    pub fn get_sync_server_url(&self) -> &Option<Url> {
+        &self.sync_server_url
+    }
+
+    pub fn update_sync_server_url(&mut self, sync_server_url: Option<Url>) {
+        self.sync_server_url = sync_server_url;
+        self.save_settings_to_file();
+    }
 }
 
 #[cfg(test)]
@@ -179,7 +194,7 @@ mod tests {
 
         assert_eq!(
             settings.get_task_prompt_delay(),
-            Duration::from_secs(DEFAULT_TASK_PROMPT_DELAY_SECONDS)
+            Duration::from_secs(crate::task_prompt_manager::DEFAULT_TASK_PROMPT_DELAY_SECONDS)
         );
         assert!(temp_dir.path().join(DATA_DIRECTORY_NAME).exists());
         assert!(temp_dir.path().join(SETTINGS_DIRECTORY_NAME).exists());
@@ -196,7 +211,7 @@ mod tests {
 
             assert_eq!(
                 settings.get_task_prompt_delay(),
-                Duration::from_secs(DEFAULT_TASK_PROMPT_DELAY_SECONDS)
+                Duration::from_secs(crate::task_prompt_manager::DEFAULT_TASK_PROMPT_DELAY_SECONDS)
             );
 
             settings.update_task_prompt_delay(new_task_delay);

@@ -2,8 +2,8 @@ CREATE TABLE
     task (
         id INTEGER PRIMARY KEY NOT NULL,
         name TEXT UNIQUE NOT NULL,
-        -- is_synced_to_server BOOLEAN NOT NULL DEFAULT FALSE,
-        last_used INTEGER NOT NULL DEFAULT (STRFTIME ('%s', 'now')) -- Unix timestamp
+        last_used INTEGER NOT NULL DEFAULT (STRFTIME ('%s', 'now')), -- Unix timestamp
+        is_synced_to_server BOOLEAN NOT NULL DEFAULT FALSE
     );
 
 -- Create an index on name for faster lookup
@@ -13,4 +13,4 @@ CREATE INDEX idx_task_name ON task (name);
 CREATE INDEX idx_task_last_used ON task (last_used);
 
 -- -- Create an index on is_synced_to_server for faster queries for syncing
--- CREATE INDEX idx_task_synced ON task (is_synced_to_server);
+CREATE INDEX idx_task_synced ON task (is_synced_to_server);

@@ -161,6 +161,17 @@ impl TaskPerformed {
     //         .filter(task_performed::task_id.eq(task_id))
     //         .execute(&mut *connection)
     // }
+
+    // TODO Test
+    pub fn get_all_unsynced_tasks_performed(
+        connection: &mut SqliteConnection,
+    ) -> Vec<TaskPerformed> {
+        task_performed::table
+            .filter(task_performed::is_synced_to_server.eq(false))
+            .select(TaskPerformed::as_select())
+            .load(&mut *connection)
+            .unwrap_or(vec![])
+    }
 }
 
 #[cfg(test)]

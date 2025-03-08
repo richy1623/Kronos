@@ -1,14 +1,21 @@
-use crate::schema::{task, task_performed};
+use crate::schema::{
+    task::{self},
+    task_performed,
+};
 use diesel::{prelude::*, result::Error};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
-#[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq, Clone)]
+#[derive(
+    Queryable, Selectable, Insertable, Debug, PartialEq, Eq, Clone, Deserialize, Serialize,
+)]
 #[diesel(table_name = crate::schema::task)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Task {
     pub id: i32,
     pub name: String,
     pub last_used: i32,
+    pub is_synced_to_server: bool,
 }
 
 impl Task {
@@ -125,6 +132,28 @@ impl Task {
                 ),
             )
             .execute(connection)
+    }
+
+    // TODO Test
+    pub fn get_all_unsynced_tasks(connection: &mut SqliteConnection) -> Vec<Task> {
+        task::table
+            .filter(task::is_synced_to_server.eq(false))
+            .select(Task::as_select())
+            .load(&mut *connection)
+            .unwrap_or(vec![])
+    }
+
+    // TODO Test
+    pub fn update_task_is_synced_to_server(
+        task_id: i32,
+        is_synced_to_server_state: bool,
+        connection: &mut SqliteConnection,
+    ) -> Result<Task, diesel::result::Error> {
+        diesel::update(task::table)
+            .filter(task::id.eq(task_id))
+            .set(task::is_synced_to_server.eq(is_synced_to_server_state))
+            .returning(Task::as_returning())
+            .get_result(&mut *connection)
     }
 }
 

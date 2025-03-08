@@ -7,6 +7,8 @@ use tokio::{sync::broadcast, sync::mpsc, time::sleep};
 
 use crate::settings::Settings;
 
+pub const DEFAULT_TASK_PROMPT_DELAY_SECONDS: u64 = 15 * 60;
+
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TaskPromptManagerState {
     UiOpen,
