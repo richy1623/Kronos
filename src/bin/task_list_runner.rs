@@ -18,7 +18,9 @@ fn main() {
 
     let task_list_widget = TaskListWidget::new(TaskList::new(
         Arc::new(Mutex::new(kronos::establish_connection(
-            settings.get_database_file_path().to_str().unwrap(),
+            settings.get_database_file_path()
+                .to_str()
+                .expect("Invalid UTF-8 in database file path"),
         ))),
         Local::now().date_naive(),
     ));
@@ -27,7 +29,7 @@ fn main() {
         native_options,
         Box::new(|cc| Ok(Box::new(MyEguiApp::new(cc, task_list_widget)))),
     )
-    .unwrap();
+    .expect("Failed to run eframe application");
 }
 
 struct MyEguiApp {
