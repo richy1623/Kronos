@@ -65,7 +65,7 @@ impl TaskPrompt {
             Some(mut task_performed) => {
                 task_performed.time_spent += time_spent_minutes;
                 TaskPerformed::update_task_performed(&task_performed, &mut connection)
-                    .expect("Insert Failed");
+                    .expect("Update Failed");
             }
             None => {
                 let task_performed = TaskPerformed {
@@ -74,7 +74,7 @@ impl TaskPrompt {
                     time_spent: time_spent_minutes,
                 };
                 TaskPerformed::insert_task_performed(&task_performed, &mut connection)
-                    .expect("Update Failed");
+                    .expect("Insert Failed");
             }
         }
 

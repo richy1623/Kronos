@@ -15,4 +15,4 @@ CREATE INDEX idx_task_performed_task_id ON task_performed (task_id);
 CREATE INDEX idx_task_performed_date ON task_performed (date);
 
 -- -- Create an index on is_synced_to_server for faster queries for syncing
-CREATE INDEX idx_task_performed_synced ON task (is_synced_to_server);
+CREATE INDEX idx_task_performed_synced ON task_performed (is_synced_to_server);

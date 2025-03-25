@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/cache/save@v4
         id: cache-test-save
-        if: (success() || failure()) && steps.cache-coverage-restore.outputs.cache-hit != 'true'
+        if: (success() || failure()) && steps.cache-test-restore.outputs.cache-hit != 'true'
         with:
           path: |
             ~/.cargo/bin/
@@ -44,8 +44,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
 
   coverage:
     name: Run Coverage Tests
@@ -94,8 +92,6 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-coverage-
 
       - name: Upload Coverage Report
         uses: actions/upload-artifact@v4
