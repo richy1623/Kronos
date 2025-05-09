@@ -2,7 +2,7 @@
   "recommendations": [
     "streetsidesoftware.code-spell-checker",
     "inferrinizzard.prettier-sql-vscode",
-    "qwtel.sqlite-viewer",
+    "yy0931.vscode-sqlite3-editor",
     "rust-lang.rust-analyzer"
   ]
 }

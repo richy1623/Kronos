@@ -3,7 +3,7 @@ use diesel::{prelude::*, result::Error};
 use crate::schema::task_performed;
 
 /// A struct to represent a task performed.
-#[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq)]
+#[derive(Queryable, Selectable, Insertable, Debug, PartialEq, Eq, Clone)]
 #[diesel(table_name = crate::schema::task_performed)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct TaskPerformed {
@@ -83,12 +83,12 @@ impl TaskPerformed {
     ///
     /// A `Result` containing the updated `TaskPerformed` if successful, or an `Error` otherwise.
     pub fn update_task_performed(
-        task_performed: TaskPerformed,
+        task_performed: &TaskPerformed,
         connection: &mut SqliteConnection,
     ) -> Result<TaskPerformed, Error> {
         diesel::update(task_performed::table)
             .filter(task_performed::task_id.eq(task_performed.task_id))
-            .filter(task_performed::date.eq(task_performed.date))
+            .filter(task_performed::date.eq(task_performed.date.clone()))
             .set(task_performed::time_spent.eq(task_performed.time_spent))
             .returning(TaskPerformed::as_returning())
             .get_result(&mut *connection)
@@ -112,6 +112,21 @@ impl TaskPerformed {
             .values(task_performed)
             .returning(TaskPerformed::as_returning())
             .get_result(&mut *connection)
+    }
+
+    pub fn insert_or_overwrite_task_performed(
+        task_performed: &TaskPerformed,
+        connection: &mut SqliteConnection,
+    ) -> Result<TaskPerformed, Error> {
+        let optional_task_performed = TaskPerformed::get_task_by_task_id_and_date(
+            task_performed.task_id,
+            &task_performed.date,
+            connection,
+        );
+        match optional_task_performed {
+            Some(_) => TaskPerformed::update_task_performed(&task_performed, connection),
+            None => TaskPerformed::insert_task_performed(task_performed, connection),
+        }
     }
 
     /// Deletes a `TaskPerformed` record.
@@ -325,10 +340,19 @@ mod tests {
         };
 
         let updated_task =
-            TaskPerformed::update_task_performed(updated_task, &mut database_connection_fixture)
+            TaskPerformed::update_task_performed(&updated_task, &mut database_connection_fixture)
                 .unwrap();
 
         assert_eq!(updated_task.time_spent, 27);
+
+        let current_task = TaskPerformed::get_task_by_task_id_and_date(
+            updated_task.task_id,
+            &updated_task.date,
+            &mut database_connection_fixture,
+        )
+        .expect("No such task after update");
+
+        assert_eq!(current_task.time_spent, 27);
     }
 
     #[rstest]
