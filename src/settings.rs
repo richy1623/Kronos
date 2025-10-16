@@ -31,6 +31,10 @@ pub struct Settings {
 
 impl Settings {
     pub fn from_dir(application_storage_path: PathBuf) -> Self {
+        print!("Creating Settings object with application_storage_path '{}'.",
+        application_storage_path
+            .to_str()
+            .unwrap_or("<unable to print path>"));
         log::trace!(
             "Creating Settings object with application_storage_path '{}'.",
             application_storage_path
@@ -121,7 +125,7 @@ impl Settings {
         log::info!(
             "Failed to load existing settings file. Creating new settings with default values."
         );
-        Settings {
+        let settings = Settings {
             task_prompt_delay: Duration::from_secs(
                 crate::task_prompt_manager::DEFAULT_TASK_PROMPT_DELAY_SECONDS,
             ),
@@ -129,7 +133,11 @@ impl Settings {
             database_file_path,
             user_settings_file_path,
             sync_server_url: None,
-        }
+        };
+
+        settings.save_settings_to_file();
+
+        settings
     }
 
     pub fn new() -> Self {
