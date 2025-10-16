@@ -1,2 +1,2 @@
 -- This file should undo anything in `up.sql`
-DROP TABLE task_performed;
+DROP TABLE IF EXISTS task_performed;

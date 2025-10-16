@@ -1,0 +1,9 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 80% # the required coverage value
+        threshold: 5% # the leniency in hitting the targetcomment:
+comment:
+  layout: "diff" # Remove items here to change the format
+  behavior: new
