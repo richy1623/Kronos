@@ -1,0 +1,6 @@
+{
+  "task_prompt_delay": { "secs": 1, "nanos": 0 },
+  "data_storage_path": "data_storage_path",
+  "database_file_path": "database/file/path/database.db",
+  "user_settings_file_path": "user/settings/file_path/settings.json"
+}
