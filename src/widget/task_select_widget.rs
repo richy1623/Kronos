@@ -1,5 +1,5 @@
 use egui::{Id, ScrollArea};
-use rand::Rng;
+use rand::RngExt;
 
 use crate::model::task::Task;
 
@@ -79,7 +79,7 @@ impl egui::Widget for &mut TaskSelectWidget {
                                 println!("Clicked: {}", task_option);
                                 self.input_text = task_option.to_string();
                                 self.did_click_option = true;
-                                ui.memory_mut(|m| m.close_popup());
+                                ui.memory_mut(|m| m.close_popup(popup_id));
                             }
                         }
                     });

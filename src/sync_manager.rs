@@ -202,7 +202,7 @@ mod tests {
         sync_manager.sync_to_server();
 
         assert_eq!(sync_manager.get_sync_status(), &SyncStatus::Synced);
-        expectation.assert_hits(2);
+        expectation.assert_calls(2);
         {
             let mut connection = db_connection.lock().unwrap();
 
